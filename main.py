@@ -16,6 +16,7 @@ import json
 from pathlib import Path
 import psutil
 import signal
+from admin_utils import UserManager, UserCredits
 
 # Zaman dilimi ayarı
 os.environ['TZ'] = 'UTC'  # UTC zaman dilimini ayarla
@@ -45,6 +46,48 @@ CHAT_HISTORY_DIR = Path("chat_history")
 CHAT_HISTORY_DIR.mkdir(exist_ok=True)
 MAX_HISTORY_AGE = 24 * 60 * 60  # 24 saat (saniye cinsinden)
 MAX_HISTORY_LENGTH = 10  # Maksimum kaç mesajı hatırlasın
+
+# Global değişkenler
+user_manager = UserManager()
+
+# Kredi kontrolü decorator'ı
+def require_credits(feature: str):
+    def decorator(func):
+        async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE, *args, **kwargs):
+            user_id = update.effective_user.id
+            
+            # Premium kullanıcılar için kredi kontrolü yapma
+            if user_manager.is_premium(user_id):
+                return await func(update, context, *args, **kwargs)
+            
+            # Yasaklı kullanıcıları kontrol et
+            if user_manager.is_banned(user_id):
+                await update.message.reply_text(
+                    "🚫 Hesabınız yasaklanmış durumda!\n"
+                    "Destek için: @Cepyseo"
+                )
+                return
+            
+            # Kredi kontrolü
+            credits = UserCredits(user_id)
+            if not credits.check_credits(feature):
+                remaining = credits.get_credits()
+                await update.message.reply_text(
+                    f"❌ Günlük kullanım limitiniz doldu!\n\n"
+                    f"🔄 Limitler her gün sıfırlanır.\n"
+                    f"👑 Premium üyelik için: @Cepyseo\n\n"
+                    f"📊 Kalan Kredileriniz:\n"
+                    f"🤖 AI Sohbet: {remaining['ai_chat']}\n"
+                    f"🖼️ Görsel Arama: {remaining['image_search']}\n"
+                    f"📁 Dosya İşlemleri: {remaining['file_operations']}"
+                )
+                return
+            
+            # Krediyi kullan
+            credits.use_credit(feature)
+            return await func(update, context, *args, **kwargs)
+        return wrapper
+    return decorator
 
 class ChatHistory:
     def __init__(self, user_id: int):
@@ -167,6 +210,63 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()  # Kullanıcıya geri bildirim gönder
 
+    # Admin işlemleri
+    if query.data.startswith("admin_"):
+        if not user_manager.is_admin(query.from_user.username):
+            await query.edit_message_text("⛔️ Bu işlemi yapma yetkiniz yok!")
+            return
+
+        if query.data == "admin_broadcast":
+            context.user_data['admin_state'] = 'waiting_broadcast'
+            await query.edit_message_text(
+                "📢 *Duyuru Mesajını Girin*\n\n"
+                "İptal etmek için /cancel yazın.",
+                parse_mode='Markdown'
+            )
+
+        elif query.data == "admin_premium":
+            context.user_data['admin_state'] = 'waiting_premium_user'
+            await query.edit_message_text(
+                "👑 *Premium Üyelik*\n\n"
+                "Kullanıcı ID veya kullanıcı adını girin.\n"
+                "İptal etmek için /cancel yazın.",
+                parse_mode='Markdown'
+            )
+
+        elif query.data == "admin_ban":
+            context.user_data['admin_state'] = 'waiting_ban_user'
+            await query.edit_message_text(
+                "🚫 *Kullanıcı Yasakla*\n\n"
+                "Yasaklanacak kullanıcının ID veya kullanıcı adını girin.\n"
+                "İptal etmek için /cancel yazın.",
+                parse_mode='Markdown'
+            )
+
+        elif query.data == "admin_unban":
+            context.user_data['admin_state'] = 'waiting_unban_user'
+            await query.edit_message_text(
+                "✅ *Yasak Kaldır*\n\n"
+                "Yasağı kaldırılacak kullanıcının ID veya kullanıcı adını girin.\n"
+                "İptal etmek için /cancel yazın.",
+                parse_mode='Markdown'
+            )
+
+        elif query.data == "admin_stats":
+            # İstatistikleri göster
+            premium_count = len(user_manager.premium_users)
+            banned_count = len(user_manager.banned_users)
+            
+            stats_text = (
+                "📊 *Bot İstatistikleri*\n\n"
+                f"👑 Premium Kullanıcılar: {premium_count}\n"
+                f"🚫 Yasaklı Kullanıcılar: {banned_count}\n"
+            )
+            
+            await query.edit_message_text(
+                stats_text,
+                parse_mode='Markdown'
+            )
+
     if query.data == "commands":
         commands_text = (
             "*📋 Kullanılabilir Komutlar:*\n\n"
@@ -209,6 +309,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text(text=help_text, parse_mode='Markdown')
 
 # Görsel Alma Fonksiyonu
+@require_credits('image_search')
 async def get_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Üyelik kontrolü
     user_id = update.effective_user.id
@@ -516,6 +617,7 @@ async def delete_default_thumb(update: Update, context: ContextTypes.DEFAULT_TYP
         await update.message.reply_text("❌ Kayıtlı varsayılan küçük resim bulunamadı!")
 
 # Dosya işleme fonksiyonunu güncelle
+@require_credits('file_operations')
 async def process_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Gönderilen dosyayı otomatik işle"""
     if not update.message.document:
@@ -669,6 +771,7 @@ async def view_default_thumb(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await update.message.reply_text(f"❌ Küçük resim görüntülenirken hata oluştu: {str(e)}")
 
 # AI Sohbet Fonksiyonu
+@require_credits('ai_chat')
 async def ai_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Yapay zeka ile sohbet"""
     user_id = update.effective_user.id
@@ -799,6 +902,36 @@ async def ai_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
     else:
         await update.message.reply_text("📝 Henüz sohbet geçmişi yok.")
+
+# Admin komutları
+async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Admin paneli"""
+    user = update.effective_user
+    if not user_manager.is_admin(user.username):
+        await update.message.reply_text("⛔️ Bu komutu kullanma yetkiniz yok!")
+        return
+
+    keyboard = [
+        [
+            InlineKeyboardButton("📢 Duyuru Yap", callback_data="admin_broadcast"),
+            InlineKeyboardButton("👑 Premium Ver", callback_data="admin_premium")
+        ],
+        [
+            InlineKeyboardButton("🚫 Kullanıcı Yasakla", callback_data="admin_ban"),
+            InlineKeyboardButton("✅ Yasak Kaldır", callback_data="admin_unban")
+        ],
+        [
+            InlineKeyboardButton("📊 İstatistikler", callback_data="admin_stats")
+        ]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    await update.message.reply_text(
+        "🔐 *Admin Paneli*\n\n"
+        "Yapmak istediğiniz işlemi seçin:",
+        parse_mode='Markdown',
+        reply_markup=reply_markup
+    )
 
 # Ana Fonksiyon
 async def main() -> None:
