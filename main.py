@@ -954,7 +954,6 @@ async def main() -> None:
             .get_updates_read_timeout(60)
             .get_updates_write_timeout(60)
             .get_updates_pool_timeout(60)
-            .rate_limiter(rate=30)        # Rate limiting ekledik
             .build()
         )
 
@@ -973,6 +972,7 @@ async def main() -> None:
             CommandHandler('ai', ai_chat),
             CommandHandler('ai_clear', ai_clear),
             CommandHandler('ai_history', ai_history),
+            CommandHandler('admin', admin_panel),  # Admin paneli komutunu ekledik
             MessageHandler((filters.PHOTO | filters.Document.ALL) & ~filters.COMMAND, process_file),
             MessageHandler(filters.TEXT & ~filters.COMMAND, handle_rename_response),
             CallbackQueryHandler(button_callback)
@@ -1039,6 +1039,104 @@ async def main() -> None:
             allowed_updates=Update.ALL_TYPES
         )
         
+        # Message handler'ı ekle - admin işlemleri için
+        async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+            """Mesaj işleyici - admin işlemleri için"""
+            if 'admin_state' not in context.user_data:
+                return
+            
+            if not user_manager.is_admin(update.effective_user.username):
+                await update.message.reply_text("⛔️ Admin yetkisine sahip değilsiniz!")
+                return
+
+            state = context.user_data['admin_state']
+            
+            if state == 'waiting_broadcast':
+                # Duyuru mesajını tüm kullanıcılara gönder
+                broadcast_msg = update.message.text
+                success = 0
+                failed = 0
+                
+                # Tüm kullanıcıları al (premium ve normal)
+                all_users = set()
+                for file in USER_CREDITS_DIR.glob("*.json"):
+                    all_users.add(int(file.stem))
+                
+                for user_id in all_users:
+                    try:
+                        await context.bot.send_message(
+                            chat_id=user_id,
+                            text=f"📢 *Duyuru*\n\n{broadcast_msg}",
+                            parse_mode='Markdown'
+                        )
+                        success += 1
+                    except Exception as e:
+                        logger.error(f"Duyuru gönderme hatası (User: {user_id}): {e}")
+                        failed += 1
+                
+                await update.message.reply_text(
+                    f"📊 *Duyuru İstatistikleri*\n\n"
+                    f"✅ Başarılı: {success}\n"
+                    f"❌ Başarısız: {failed}",
+                    parse_mode='Markdown'
+                )
+                
+            elif state == 'waiting_premium_user':
+                # Premium ver
+                try:
+                    user_input = update.message.text
+                    user_id = int(user_input) if user_input.isdigit() else None
+                    
+                    if user_id:
+                        user_manager.add_premium(user_id)
+                        await update.message.reply_text(
+                            f"✅ Premium üyelik eklendi!\n"
+                            f"👤 Kullanıcı ID: {user_id}"
+                        )
+                    else:
+                        await update.message.reply_text("❌ Geçersiz kullanıcı ID'si!")
+                except Exception as e:
+                    await update.message.reply_text(f"❌ Hata: {e}")
+                    
+            elif state == 'waiting_ban_user':
+                # Kullanıcıyı yasakla
+                try:
+                    user_input = update.message.text
+                    user_id = int(user_input) if user_input.isdigit() else None
+                    
+                    if user_id:
+                        user_manager.ban_user(user_id)
+                        await update.message.reply_text(
+                            f"✅ Kullanıcı yasaklandı!\n"
+                            f"👤 Kullanıcı ID: {user_id}"
+                        )
+                    else:
+                        await update.message.reply_text("❌ Geçersiz kullanıcı ID'si!")
+                except Exception as e:
+                    await update.message.reply_text(f"❌ Hata: {e}")
+                    
+            elif state == 'waiting_unban_user':
+                # Yasağı kaldır
+                try:
+                    user_input = update.message.text
+                    user_id = int(user_input) if user_input.isdigit() else None
+                    
+                    if user_id:
+                        user_manager.unban_user(user_id)
+                        await update.message.reply_text(
+                            f"✅ Kullanıcının yasağı kaldırıldı!\n"
+                            f"👤 Kullanıcı ID: {user_id}"
+                        )
+                    else:
+                        await update.message.reply_text("❌ Geçersiz kullanıcı ID'si!")
+                except Exception as e:
+                    await update.message.reply_text(f"❌ Hata: {e}")
+            
+            # İşlem bittikten sonra state'i temizle
+            del context.user_data['admin_state']
+
+        application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_handler))
+
         # Sonsuz döngüde bekle ve bağlantıyı kontrol et
         while True:
             try:
