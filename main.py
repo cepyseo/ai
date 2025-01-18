@@ -807,6 +807,11 @@ async def main() -> None:
             ApplicationBuilder()
             .token(TOKEN)
             .concurrent_updates(False)  # Eşzamanlı güncellemeleri devre dışı bırak
+            .connection_pool_size(8)    # Bağlantı havuzu boyutunu artır
+            .pool_timeout(30)           # Havuz zaman aşımını artır
+            .connect_timeout(30)        # Bağlantı zaman aşımını artır
+            .read_timeout(30)           # Okuma zaman aşımını artır
+            .write_timeout(30)          # Yazma zaman aşımını artır
             .build()
         )
 
@@ -827,7 +832,7 @@ async def main() -> None:
             CommandHandler('ai_history', ai_history),
             MessageHandler((filters.PHOTO | filters.Document.ALL) & ~filters.COMMAND, process_file),
             MessageHandler(filters.TEXT & ~filters.COMMAND, handle_rename_response),
-            CallbackQueryHandler(button_callback)  # Callback handler'ı ekle
+            CallbackQueryHandler(button_callback)
         ]
 
         for handler in handlers:
@@ -838,11 +843,33 @@ async def main() -> None:
         # Polling başlat
         await application.initialize()
         await application.start()
-        await application.updater.start_polling()
         
-        # Sonsuz döngüde bekle
+        # Polling yapılandırması
+        await application.updater.start_polling(
+            poll_interval=1.0,          # Polling aralığı
+            timeout=30,                 # Zaman aşımı
+            bootstrap_retries=-1,       # Sonsuz yeniden deneme
+            read_timeout=30,            # Okuma zaman aşımı
+            write_timeout=30,           # Yazma zaman aşımı
+            connect_timeout=30,         # Bağlantı zaman aşımı
+            pool_timeout=30,            # Havuz zaman aşımı
+            drop_pending_updates=True   # Bekleyen güncellemeleri düşür
+        )
+        
+        # Sonsuz döngüde bekle ve bağlantıyı kontrol et
         while True:
-            await asyncio.sleep(1)
+            try:
+                await asyncio.sleep(60)  # Her dakika kontrol et
+                # Bağlantıyı test et
+                me = await application.bot.get_me()
+                logger.info(f"Bot bağlantısı aktif: {me.username}")
+            except Exception as e:
+                logger.error(f"Bağlantı hatası, yeniden başlatılıyor: {e}")
+                # Yeniden bağlan
+                await application.stop()
+                await application.initialize()
+                await application.start()
+                await application.updater.start_polling()
             
     except telegram.error.NetworkError as e:
         logger.error(f"Ağ hatası: {e}")
@@ -850,22 +877,16 @@ async def main() -> None:
         logger.error(f"Hata: {e}", exc_info=True)
     finally:
         if application:
-            await application.stop()
+            try:
+                await application.stop()
+                logger.info("Bot düzgün şekilde kapatıldı.")
+            except Exception as e:
+                logger.error(f"Kapatma hatası: {e}")
 
 if __name__ == '__main__':
-    # Önceki process'leri temizle
-    try:
-        import psutil
-        current_pid = os.getpid()
-        for proc in psutil.process_iter(['pid', 'name']):
-            if proc.info['name'] == 'python' and proc.info['pid'] != current_pid:
-                try:
-                    os.kill(proc.info['pid'], 9)
-                except:
-                    pass
-        time.sleep(2)  # Process'lerin kapanmasını bekle
-    except:
-        pass
-
-    # Botu başlat
-    asyncio.run(main())
+    while True:  # Ana döngü ekle
+        try:
+            asyncio.run(main())
+        except Exception as e:
+            logger.error(f"Kritik hata, yeniden başlatılıyor: {e}")
+            time.sleep(5)  # 5 saniye bekle ve yeniden başlat
