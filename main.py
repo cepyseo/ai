@@ -14,6 +14,8 @@ import io
 import re
 import json
 from pathlib import Path
+import psutil
+import signal
 
 # Zaman dilimi ayarı
 os.environ['TZ'] = 'UTC'  # UTC zaman dilimini ayarla
@@ -801,17 +803,25 @@ async def ai_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # Ana Fonksiyon
 async def main() -> None:
     application = None
+    retry_count = 0
+    max_retries = 5
+    
     try:
-        # Basit yapılandırma
+        # Gelişmiş yapılandırma
         application = (
             ApplicationBuilder()
             .token(TOKEN)
-            .concurrent_updates(False)  # Eşzamanlı güncellemeleri devre dışı bırak
-            .connection_pool_size(8)    # Bağlantı havuzu boyutunu artır
-            .pool_timeout(30)           # Havuz zaman aşımını artır
-            .connect_timeout(30)        # Bağlantı zaman aşımını artır
-            .read_timeout(30)           # Okuma zaman aşımını artır
-            .write_timeout(30)          # Yazma zaman aşımını artır
+            .concurrent_updates(False)
+            .connection_pool_size(16)     # Bağlantı havuzu boyutunu artırdık
+            .pool_timeout(60)             # Zaman aşımı sürelerini artırdık
+            .connect_timeout(60)
+            .read_timeout(60)
+            .write_timeout(60)
+            .get_updates_connection_pool_size(16)  # GetUpdates için ayrı havuz
+            .get_updates_read_timeout(60)
+            .get_updates_write_timeout(60)
+            .get_updates_pool_timeout(60)
+            .rate_limiter(rate=30)        # Rate limiting ekledik
             .build()
         )
 
@@ -840,41 +850,96 @@ async def main() -> None:
 
         logger.info("Bot başlatılıyor...")
         
-        # Polling başlat
+        # Sağlık kontrolü fonksiyonu
+        async def health_check():
+            try:
+                me = await application.bot.get_me()
+                logger.info(f"Bot sağlık kontrolü başarılı: {me.username}")
+                return True
+            except Exception as e:
+                logger.error(f"Sağlık kontrolü başarısız: {e}")
+                return False
+
+        # Yeniden başlatma fonksiyonu
+        async def restart_bot():
+            nonlocal retry_count
+            retry_count += 1
+            wait_time = min(retry_count * 5, 30)  # Artan bekleme süresi, max 30 saniye
+            
+            logger.warning(f"Bot yeniden başlatılıyor... Deneme: {retry_count}, Bekleme: {wait_time}s")
+            
+            try:
+                await application.stop()
+                await asyncio.sleep(wait_time)
+                await application.initialize()
+                await application.start()
+                await application.updater.start_polling(
+                    poll_interval=1.0,
+                    timeout=60,
+                    bootstrap_retries=-1,
+                    read_timeout=60,
+                    write_timeout=60,
+                    connect_timeout=60,
+                    pool_timeout=60,
+                    drop_pending_updates=True,
+                    allowed_updates=Update.ALL_TYPES
+                )
+                retry_count = 0  # Başarılı başlatma sonrası sayacı sıfırla
+                logger.info("Bot başarıyla yeniden başlatıldı!")
+                return True
+            except Exception as e:
+                logger.error(f"Yeniden başlatma hatası: {e}")
+                return False
+
+        # İlk başlatma
         await application.initialize()
         await application.start()
-        
-        # Polling yapılandırması
         await application.updater.start_polling(
-            poll_interval=1.0,          # Polling aralığı
-            timeout=30,                 # Zaman aşımı
-            bootstrap_retries=-1,       # Sonsuz yeniden deneme
-            read_timeout=30,            # Okuma zaman aşımı
-            write_timeout=30,           # Yazma zaman aşımı
-            connect_timeout=30,         # Bağlantı zaman aşımı
-            pool_timeout=30,            # Havuz zaman aşımı
-            drop_pending_updates=True   # Bekleyen güncellemeleri düşür
+            poll_interval=1.0,
+            timeout=60,
+            bootstrap_retries=-1,
+            read_timeout=60,
+            write_timeout=60,
+            connect_timeout=60,
+            pool_timeout=60,
+            drop_pending_updates=True,
+            allowed_updates=Update.ALL_TYPES
         )
         
         # Sonsuz döngüde bekle ve bağlantıyı kontrol et
         while True:
             try:
-                await asyncio.sleep(60)  # Her dakika kontrol et
-                # Bağlantıyı test et
-                me = await application.bot.get_me()
-                logger.info(f"Bot bağlantısı aktif: {me.username}")
+                await asyncio.sleep(30)  # Her 30 saniyede bir kontrol
+                
+                # Sağlık kontrolü
+                if not await health_check():
+                    if retry_count >= max_retries:
+                        logger.critical("Maksimum yeniden başlatma denemesi aşıldı!")
+                        raise Exception("Bot kritik hata - yeniden başlatma limiti aşıldı")
+                    
+                    if not await restart_bot():
+                        continue
+                
+                # Bellek kullanımını kontrol et
+                process = psutil.Process(os.getpid())
+                memory_usage = process.memory_info().rss / 1024 / 1024  # MB cinsinden
+                logger.info(f"Bellek kullanımı: {memory_usage:.2f} MB")
+                
+                # Yüksek bellek kullanımında yeniden başlat
+                if memory_usage > 500:  # 500MB üzerinde
+                    logger.warning("Yüksek bellek kullanımı tespit edildi, yeniden başlatılıyor...")
+                    await restart_bot()
+                
+            except asyncio.CancelledError:
+                raise
             except Exception as e:
-                logger.error(f"Bağlantı hatası, yeniden başlatılıyor: {e}")
-                # Yeniden bağlan
-                await application.stop()
-                await application.initialize()
-                await application.start()
-                await application.updater.start_polling()
+                logger.error(f"Döngü hatası: {e}")
+                await asyncio.sleep(5)
             
     except telegram.error.NetworkError as e:
         logger.error(f"Ağ hatası: {e}")
     except Exception as e:
-        logger.error(f"Hata: {e}", exc_info=True)
+        logger.error(f"Kritik hata: {e}", exc_info=True)
     finally:
         if application:
             try:
@@ -884,9 +949,50 @@ async def main() -> None:
                 logger.error(f"Kapatma hatası: {e}")
 
 if __name__ == '__main__':
-    while True:  # Ana döngü ekle
+    # Hata ayıklama modunu etkinleştir
+    logging.basicConfig(
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        level=logging.INFO
+    )
+    
+    # Sinyal işleyicileri
+    def signal_handler(signum, frame):
+        logger.info(f"Sinyal alındı: {signum}")
+        raise KeyboardInterrupt
+
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+    
+    while True:
         try:
-            asyncio.run(main())
+            # Önceki process'leri temizle
+            current_pid = os.getpid()
+            for proc in psutil.process_iter(['pid', 'name']):
+                if proc.info['name'] == 'python' and proc.info['pid'] != current_pid:
+                    try:
+                        os.kill(proc.info['pid'], signal.SIGTERM)
+                        logger.info(f"Eski process sonlandırıldı: {proc.info['pid']}")
+                    except:
+                        pass
+            
+            # Event loop'u temizle ve yeniden başlat
+            try:
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    loop.stop()
+                    loop.close()
+            except:
+                pass
+            
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            
+            # Botu başlat
+            loop.run_until_complete(main())
+            
+        except KeyboardInterrupt:
+            logger.info("Bot kullanıcı tarafından durduruldu.")
+            break
         except Exception as e:
             logger.error(f"Kritik hata, yeniden başlatılıyor: {e}")
-            time.sleep(5)  # 5 saniye bekle ve yeniden başlat
+            time.sleep(5)
