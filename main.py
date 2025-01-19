@@ -976,14 +976,8 @@ async def handle_admin_actions(update: Update, context: ContextTypes.DEFAULT_TYP
                 # Tüm kullanıcıları ve grupları topla
                 all_targets = set()
                 
-                # Bot'un updates'lerini al
-                updates = await context.bot.get_updates(offset=-1, timeout=1)
-                for update in updates:
-                    if update.message:
-                        if update.message.chat.type == 'private':
-                            all_targets.add(update.message.chat.id)
-                        elif update.message.chat.type in ['group', 'supergroup']:
-                            all_targets.add(update.message.chat.id)
+                # Mevcut kullanıcıyı ekle
+                all_targets.add(update.effective_chat.id)
                 
                 # Dosya sisteminden kullanıcıları al
                 for directory in [USER_DATA_DIR, CHAT_HISTORY_DIR, USER_CREDITS_DIR]:
@@ -1002,13 +996,20 @@ async def handle_admin_actions(update: Update, context: ContextTypes.DEFAULT_TYP
                         except (ValueError, TypeError):
                             continue
                 
-                # Bot'un üye olduğu kanalları ve grupları al
+                # Kanal ID'sini ekle
                 try:
-                    async for dialog in context.bot.get_chat_administrators(CHANNEL_USERNAME):
-                        if dialog.chat.type in ['channel', 'group', 'supergroup']:
-                            all_targets.add(dialog.chat.id)
+                    channel = await context.bot.get_chat(CHANNEL_USERNAME)
+                    all_targets.add(channel.id)
                 except Exception as e:
-                    logger.error(f"Kanal/grup listesi alınamadı: {e}")
+                    logger.error(f"Kanal bilgisi alınamadı: {e}")
+                
+                # Botun üye olduğu grupları al
+                try:
+                    async for member in context.bot.get_chat_member(CHANNEL_USERNAME, context.bot.id):
+                        if member.chat.type in ['group', 'supergroup']:
+                            all_targets.add(member.chat.id)
+                except Exception as e:
+                    logger.error(f"Grup listesi alınamadı: {e}")
                 
                 logger.info(f"Hedef listesi: {all_targets}")
                 total_targets = len(all_targets)
