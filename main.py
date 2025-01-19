@@ -1,6 +1,6 @@
 import os
 import requests
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, Application
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, filters, CallbackQueryHandler, MessageHandler
 import urllib3
 import asyncio
@@ -45,6 +45,21 @@ from services.chat_service import ChatService
 from handlers.admin_handlers import handle_admin_actions
 from utils.credits import check_credits, update_credits
 from telegram.error import NetworkError, TimedOut
+from handlers.command_handlers import (
+    start,
+    help_command,
+    admin_panel,
+    ai_chat,
+    ai_clear,
+    ai_history,
+    get_image,
+    add_thumbnail,
+    delete_default_thumb,
+    view_default_thumb
+)
+from handlers.file_handlers import process_file
+from handlers.error_handler import error_handler
+from services.setup_service import setup_project
 
 # Zaman dilimi ayarı
 os.environ['TZ'] = 'UTC'  # UTC zaman dilimini ayarla
@@ -146,20 +161,13 @@ async def ping():
 async def webhook():
     """Telegram webhook handler"""
     try:
-        if request.method == 'POST':
-            json_data = await request.get_json()
-            logger.info(f"Gelen webhook verisi: {json_data}")
-            
-            # Global application'ı kullan
-            update = Update.de_json(json_data, application.bot)
-            
-            try:
-                await application.process_update(update)
-                logger.info(f"Update başarıyla işlendi: {update.update_id}")
-            except Exception as e:
-                logger.error(f"Update işleme hatası: {e}", exc_info=True)
-            
-            return 'OK'
+        json_data = await request.get_json()
+        logger.info(f"Gelen webhook verisi: {json_data}")
+        
+        update = Update.de_json(json_data, app.bot_application.bot)
+        await app.bot_application.process_update(update)
+        
+        return 'OK'
     except Exception as e:
         logger.error(f"Webhook hatası: {e}", exc_info=True)
         return 'Error', 500
@@ -433,15 +441,104 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         if query.data.startswith('admin_'):
             await handle_admin_callback(update, context)
         else:
+            if query.data == "commands":
+                commands_text = (
+                    "🤖 *Kullanılabilir Komutlar*\n\n"
+                    "*Genel Komutlar:*\n"
+                    "• /start - Botu başlat\n"
+                    "• /help - Yardım menüsü\n\n"
+                    "*AI Komutları:*\n"
+                    "• /ai <mesaj> - AI ile sohbet et\n"
+                    "• /ai_clear - Sohbet geçmişini temizle\n"
+                    "• /ai_history - Sohbet geçmişini göster\n\n"
+                    "*Görsel Komutları:*\n"
+                    "• /img <arama> - Görsel ara\n"
+                    "• /thumb - Dosyaya küçük resim ekle\n"
+                    "• /del_thumb - Varsayılan küçük resmi sil\n"
+                    "• /view_thumb - Varsayılan küçük resmi göster\n\n"
+                    "*İstatistikler:*\n"
+                    "• /stats - Bot istatistiklerini göster\n\n"
+                    "💡 Her komut hakkında detaylı bilgi için /help yazın"
+                )
+                
+                keyboard = [[
+                    InlineKeyboardButton("◀️ Geri", callback_data="back_to_start")
+                ]]
+                
+                await query.message.edit_text(
+                    commands_text,
+                    parse_mode='Markdown',
+                    reply_markup=InlineKeyboardMarkup(keyboard)
+                )
+                
+            elif query.data == "help":
+                help_text = (
+                    "🔍 *Yardım Menüsü*\n\n"
+                    "*AI Sohbet:*\n"
+                    "• AI ile sohbet etmek için /ai komutunu kullanın\n"
+                    "• Örnek: `/ai merhaba` veya sadece mesaj yazın\n\n"
+                    "*Görsel Arama:*\n"
+                    "• Görsel aramak için /img komutunu kullanın\n"
+                    "• Örnek: `/img kedi`\n\n"
+                    "*Dosya İşlemleri:*\n"
+                    "• Dosyalara küçük resim eklemek için /thumb kullanın\n"
+                    "• Varsayılan küçük resmi silmek için /del_thumb\n"
+                    "• Mevcut küçük resmi görmek için /view_thumb\n\n"
+                    "*Kredi Sistemi:*\n"
+                    "• Her işlem için belirli krediler gerekir\n"
+                    "• Premium üyelik için @Cepyseo ile iletişime geçin\n\n"
+                    "❓ Başka sorunuz varsa @Cepyseo'ya yazabilirsiniz"
+                )
+                
+                keyboard = [[
+                    InlineKeyboardButton("◀️ Geri", callback_data="back_to_start")
+                ]]
+                
+                await query.message.edit_text(
+                    help_text,
+                    parse_mode='Markdown',
+                    reply_markup=InlineKeyboardMarkup(keyboard)
+                )
+                
+            elif query.data == "back_to_start":
+                # Ana menüye dön
+                keyboard = [
+                    [
+                        InlineKeyboardButton("📚 Komutlar", callback_data="commands"),
+                        InlineKeyboardButton("ℹ️ Yardım", callback_data="help")
+                    ],
+                    [
+                        InlineKeyboardButton("📢 Kanal", url=f"https://t.me/{CHANNEL_USERNAME.replace('@', '')}"),
+                        InlineKeyboardButton("👨‍💻 Geliştirici", url="https://t.me/clonicai")
+                    ]
+                ]
+                
+                welcome_message = (
+                    f"🎉 *Hoş Geldiniz!*\n\n"
+                    "Ben *ClonicAI Bot*, yapay zeka destekli çok yönlü bir asistanım. "
+                    "Size aşağıdaki konularda yardımcı olabilirim:\n\n"
+                    "🤖 *AI Sohbet*\n"
+                    "• Yapay zeka ile sohbet edebilir\n"
+                    "• Sorularınıza detaylı yanıtlar alabilir\n"
+                    "• 24 saat sohbet geçmişi tutabilirsiniz\n\n"
+                    "🖼️ *Görsel İşlemler*\n"
+                    "• Yüksek kaliteli görseller arayabilir\n"
+                    "• Dosyalarınıza küçük resim ekleyebilir\n"
+                    "• Dosya adlarını düzenleyebilirsiniz\n\n"
+                    "📱 *Kolay Kullanım*\n"
+                    "• Türkçe dil desteği\n"
+                    "• Hızlı yanıt süresi\n"
+                    "• Kullanıcı dostu arayüz"
+                )
+                
+                await query.message.edit_text(
+                    welcome_message,
+                    parse_mode='Markdown',
+                    reply_markup=InlineKeyboardMarkup(keyboard)
+                )
+            
             await query.answer()
             
-            if query.data == "commands":
-                # ... mevcut commands kodu ...
-                pass
-            elif query.data == "help":
-                # ... mevcut help kodu ...
-                pass
-                
     except Exception as e:
         logger.error(f"Callback hatası: {e}")
         await query.answer("❌ Bir hata oluştu!", show_alert=True)
@@ -1240,37 +1337,42 @@ async def cancel_admin_action(update: Update, context: ContextTypes.DEFAULT_TYPE
 RENDER_EXTERNAL_URL = os.environ.get('RENDER_EXTERNAL_URL')
 RENDER_PORT = int(os.environ.get("PORT", 10000))
 
-async def setup_webhook(application):
-    """Webhook'u ayarla"""
+async def setup_webhook(application: Application) -> bool:
+    """
+    Webhook'u yapılandırır
+    """
     try:
-        if RENDER_EXTERNAL_URL:
-            WEBHOOK_URL = f"https://{RENDER_EXTERNAL_URL}/{TOKEN}"
-        else:
-            logger.warning("RENDER_EXTERNAL_URL bulunamadı, webhook kullanılamayacak")
+        if not RENDER_EXTERNAL_URL:
+            logger.warning("RENDER_EXTERNAL_URL bulunamadı")
             return False
             
-        # Önce mevcut webhook'u temizle
+        webhook_url = f"https://{RENDER_EXTERNAL_URL}/{TOKEN}"
+        
+        # Mevcut webhook'u temizle
         await application.bot.delete_webhook(drop_pending_updates=True)
         
         # Yeni webhook'u ayarla
         success = await application.bot.set_webhook(
-            url=WEBHOOK_URL,
-            allowed_updates=['message', 'callback_query', 'channel_post', 'edited_message'],
+            url=webhook_url,
+            allowed_updates=['message', 'callback_query', 'channel_post'],
             drop_pending_updates=True,
-            max_connections=40  # Render Free tier için optimize edildi
+            max_connections=40
         )
         
         if success:
-            logger.info(f"Webhook başarıyla ayarlandı: {WEBHOOK_URL}")
+            logger.info(f"Webhook ayarlandı: {webhook_url}")
             return True
-        return False
             
+        return False
+        
     except Exception as e:
-        logger.error(f"Webhook ayarlama hatası: {e}", exc_info=True)
+        logger.error(f"Webhook hatası: {e}", exc_info=True)
         return False
 
-async def init_application():
-    """Bot uygulamasını başlat"""
+async def init_application() -> Application:
+    """
+    Bot uygulamasını başlatır ve yapılandırır
+    """
     application = (
         ApplicationBuilder()
         .token(TOKEN)
@@ -1283,30 +1385,32 @@ async def init_application():
         .build()
     )
     
-    # Handler'ları ekle
+    # Komut handler'ları
     handlers = [
         CommandHandler('start', start),
+        CommandHandler('help', help_command),
         CommandHandler('admin', admin_panel),
-        CommandHandler('cancel', cancel_admin_action),
         CommandHandler('ai', ai_chat),
         CommandHandler('ai_clear', ai_clear),
         CommandHandler('ai_history', ai_history),
         CommandHandler('img', get_image),
-        CommandHandler('stats', show_stats),
         CommandHandler('thumb', add_thumbnail),
         CommandHandler('del_thumb', delete_default_thumb),
         CommandHandler('view_thumb', view_default_thumb),
-        CallbackQueryHandler(handle_callback_query),  # Callback'leri önce işle
-        MessageHandler((filters.PHOTO | filters.Document.ALL) & ~filters.COMMAND, process_file),
-        MessageHandler(filters.TEXT & ~filters.COMMAND, handle_chat)  # En son normal mesajları işle
+        CallbackQueryHandler(handle_callback_query),
+        MessageHandler(
+            (filters.PHOTO | filters.Document.ALL) & ~filters.COMMAND,
+            process_file
+        ),
+        MessageHandler(filters.TEXT & ~filters.COMMAND, handle_chat)
     ]
 
     for handler in handlers:
         application.add_handler(handler)
-
-    # Hata handler'ını ekle
+    
+    # Hata handler'ı
     application.add_error_handler(error_handler)
-
+    
     return application
 
 async def start_bot(application: Application) -> None:
@@ -1343,45 +1447,41 @@ async def start_bot(application: Application) -> None:
             break
 
 async def main() -> None:
-    """Ana uygulama başlatma fonksiyonu"""
+    """
+    Ana uygulama başlatma fonksiyonu
+    """
     try:
-        # Loglama ayarlarını yükle
-        setup_logging()
+        # Proje yapısını kur
+        setup_project()
         
-        # Uygulama oluştur
+        # Bot uygulamasını başlat
         application = await init_application()
         await application.initialize()
-        logger.info("Bot başlatıldı")
         
-        # Web uygulamasını başlat
+        # Web uygulamasını yapılandır
         app.bot_application = application
         
-        # Hypercorn config
+        # Hypercorn ayarları
         config = Config()
         config.bind = [f"0.0.0.0:{RENDER_PORT}"]
         config.use_reloader = False
-        config.workers = 1  # Render Free tier için optimize edildi
+        config.workers = 1
         config.graceful_timeout = 10
-        config.timeout_keep_alive = 30
         
         # Webhook'u ayarla
         webhook_success = await setup_webhook(application)
         
         if webhook_success:
-            logger.info(f"Web uygulaması {RENDER_PORT} portunda başlatılıyor (Webhook modu)...")
+            logger.info(f"Web uygulaması başlatılıyor (Port: {RENDER_PORT})")
             await serve(app, config)
         else:
             logger.info("Polling modunda başlatılıyor...")
-            await application.run_polling(
-                drop_pending_updates=True,
-                allowed_updates=["message", "callback_query", "chat_member"]
-            )
+            await application.run_polling(drop_pending_updates=True)
             
     except Exception as e:
         logger.critical(f"Kritik hata: {e}", exc_info=True)
         raise
     finally:
-        # Temizlik işlemleri
         if 'application' in locals():
             await application.stop()
             await application.shutdown()
@@ -1394,4 +1494,4 @@ if __name__ == '__main__':
     try:
         asyncio.run(main())
     except Exception as e:
-        logger.critical(f"Program beklenmedik şekilde sonlandı: {e}", exc_info=True)
+        logger.critical(f"Program sonlandı: {e}", exc_info=True)

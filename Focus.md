@@ -1,10 +1,10 @@
-# Project Focus: imgbot
+# Project Focus: 
 
 **Current Goal:** Project directory structure and information
 
 **Project Context:**
 Type: Language: python
-Target Users: Users of imgbot
+Target Users: Users of 
 Main Functionality: Project directory structure and information
 Key Requirements:
 - Type: Python Project
@@ -20,7 +20,7 @@ Key Requirements:
 
 # 📁 Project Structure
 ├─ 📄 admin_utils.py (140 lines) - Python script containing project logic
-├─ 📄 main.py (1397 lines) - Python script containing project logic
+├─ 📄 main.py (1497 lines) - Python script containing project logic
 ├─ 📄 setup_project.py (21 lines) - Python script containing project logic
 ├─ 📁 config
 │  ├─ 📄 logging_config.py (9 lines) - Python script containing project logic
@@ -32,7 +32,7 @@ Key Requirements:
 │  ├─ 📄 callback_handlers.py (48 lines) - Python script containing project logic
 │  ├─ 📄 chat_handlers.py (84 lines) - Python script containing project logic
 │  ├─ 📄 commands.py (43 lines) - Python script containing project logic
-│  ├─ 📄 error_handler.py (47 lines) - Python script containing project logic
+│  ├─ 📄 error_handler.py (48 lines) - Python script containing project logic
 │  ├─ 📄 file_ops.py (23 lines) - Python script containing project logic
 │  ├─ 📄 settings_handlers.py (44 lines) - Python script containing project logic
 │  └─ 📄 stats.py (39 lines) - Python script containing project logic
@@ -140,9 +140,10 @@ Functions:
 - require_premium
 - wrapper
 
-`handlers\error_handler.py` (47 lines)
+`handlers\error_handler.py` (48 lines)
 Functions:
 - error_handler
+- isinstance
 
 `handlers\file_ops.py` (23 lines)
 Functions:
@@ -173,7 +174,7 @@ Functions:
 Functions:
 - setup_logging
 
-`main.py` (1397 lines)
+`main.py` (1497 lines)
 Functions:
 - ChatHistory
 - _load_history
@@ -255,9 +256,9 @@ Functions:
 - update_stats
 
 # 📊 Project Overview
-**Files:** 27  |  **Lines:** 2,756
+**Files:** 27  |  **Lines:** 2,857
 
 ## 📁 File Distribution
-- .py: 27 files (2,756 lines)
+- .py: 27 files (2,857 lines)
 
-*Updated: January 19, 2025 at 04:57 PM*
+*Updated: January 19, 2025 at 05:05 PM*
