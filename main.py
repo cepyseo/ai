@@ -24,7 +24,7 @@ from quart import Quart, request
 from hypercorn.config import Config
 from hypercorn.asyncio import serve
 import httpx
-from config.settings import TOKEN, CONNECT_TIMEOUT, READ_TIMEOUT, WRITE_TIMEOUT, POOL_TIMEOUT
+from config.settings import TOKEN, CONNECT_TIMEOUT, READ_TIMEOUT, WRITE_TIMEOUT, POOL_TIMEOUT, TELEGRAM_TOKEN, WEBHOOK_URL, WEBHOOK_PORT
 from web.app import create_app
 from handlers.stats import show_stats
 from handlers.callback_handlers import handle_callback_query
@@ -33,6 +33,7 @@ from services.user_service import UserService
 from services.chat_service import ChatService
 from handlers.admin_handlers import handle_admin_actions
 from utils.credits import check_credits, update_credits
+from telegram.error import NetworkError, TimedOut
 
 # Zaman dilimi ayarı
 os.environ['TZ'] = 'UTC'  # UTC zaman dilimini ayarla
@@ -1308,54 +1309,79 @@ async def init_application():
 
     return application
 
-async def main():
-    try:
-        global application
-        
-        # Proje yapısını oluştur
-        setup_project()
-        logger.info("Proje yapısı oluşturuldu")
-        
-        # Bot'u başlat
-        application = await init_application()
-        await application.initialize()
-        logger.info("Bot başlatıldı")
-        
-        # Webhook'u ayarla
-        await setup_webhook(application)
-        
-        # Bot'u başlat
-        await application.start()
-        logger.info("Application başlatıldı")
-        
-        # Web uygulamasını başlat
-        app.bot_application = application  # Global app'e application'ı ekle
-        
-        # Hypercorn config
-        config = Config()
-        config.bind = [f"0.0.0.0:{PORT}"]
-        config.use_reloader = False
-        
-        logger.info(f"Web uygulaması {PORT} portunda başlatılıyor...")
-        await serve(app, config)
-        
-    except Exception as e:
-        logger.error(f"Kritik hata: {e}", exc_info=True)
-        raise
+async def start_bot(application: Application) -> None:
+    """
+    Botu başlatır ve gerekli hata kontrollerini yapar
+    """
+    while True:
+        try:
+            if WEBHOOK_URL:
+                # Webhook modu
+                await application.bot.set_webhook(url=WEBHOOK_URL)
+                await application.run_webhook(
+                    listen="0.0.0.0",
+                    port=WEBHOOK_PORT,
+                    webhook_url=WEBHOOK_URL
+                )
+            else:
+                # Polling modu
+                await application.bot.delete_webhook(drop_pending_updates=True)
+                await application.run_polling(
+                    drop_pending_updates=True,
+                    allowed_updates=["message", "callback_query", "chat_member"]
+                )
+            
+        except (NetworkError, TimedOut) as e:
+            logger.error(f"Bağlantı hatası oluştu: {e}", exc_info=True)
+            # Yeniden bağlanmadan önce bekle
+            await asyncio.sleep(10)
+            continue
+            
+        except Exception as e:
+            logger.critical(f"Kritik hata oluştu: {e}", exc_info=True)
+            # Ciddi bir hata durumunda programı sonlandır
+            break
+
+async def main() -> None:
+    """
+    Ana uygulama başlatma fonksiyonu
+    """
+    # Loglama ayarlarını yükle
+    setup_logging()
+    
+    # Uygulama oluştur
+    application = await init_application()
+    await application.initialize()
+    logger.info("Bot başlatıldı")
+    
+    # Webhook'u ayarla
+    await setup_webhook(application)
+    
+    # Bot'u başlat
+    await start_bot(application)
+    logger.info("Application başlatıldı")
+    
+    # Web uygulamasını başlat
+    app.bot_application = application  # Global app'e application'ı ekle
+    
+    # Hypercorn config
+    config = Config()
+    config.bind = [f"0.0.0.0:{PORT}"]
+    config.use_reloader = False
+    
+    logger.info(f"Web uygulaması {PORT} portunda başlatılıyor...")
+    await serve(app, config)
+    
+    # Temizlik işlemleri
+    await application.stop()
+    await application.shutdown()
 
 # Quart app ayarlarını güncelle
 app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024  # 10MB
 app.config['PROPAGATE_EXCEPTIONS'] = True
 
 if __name__ == '__main__':
-    retry_count = 0
-    max_retries = 5
-    
-    while retry_count < max_retries:
-        try:
-            asyncio.run(main())
-            break
-        except Exception as e:
-            retry_count += 1
-            logger.error(f"Yeniden başlatılıyor ({retry_count}/{max_retries})")
-            time.sleep(5 * retry_count)
+    try:
+        asyncio.run(main())
+    except Exception as e:
+        logger.critical(f"Program beklenmedik şekilde sonlandı: {e}", exc_info=True)
