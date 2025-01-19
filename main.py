@@ -936,29 +936,22 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # Ana Fonksiyon
 async def main() -> None:
     application = None
-    retry_count = 0
-    max_retries = 5
-    
     try:
-        # Gelişmiş yapılandırma
+        # Webhook'u temizle
+        requests.get(f'https://api.telegram.org/bot{TOKEN}/deleteWebhook')
+        
+        # Basit yapılandırma
         application = (
             ApplicationBuilder()
             .token(TOKEN)
             .concurrent_updates(False)
-            .connection_pool_size(16)     # Bağlantı havuzu boyutunu artırdık
-            .pool_timeout(60)             # Zaman aşımı sürelerini artırdık
-            .connect_timeout(60)
-            .read_timeout(60)
-            .write_timeout(60)
-            .get_updates_connection_pool_size(16)  # GetUpdates için ayrı havuz
-            .get_updates_read_timeout(60)
-            .get_updates_write_timeout(60)
-            .get_updates_pool_timeout(60)
+            .connection_pool_size(8)
+            .pool_timeout(30)
+            .connect_timeout(30)
+            .read_timeout(30)
+            .write_timeout(30)
             .build()
         )
-
-        # Error handler'ı ekle
-        application.add_error_handler(error_handler)
 
         # Handler'ları ekle
         handlers = [
@@ -972,7 +965,7 @@ async def main() -> None:
             CommandHandler('ai', ai_chat),
             CommandHandler('ai_clear', ai_clear),
             CommandHandler('ai_history', ai_history),
-            CommandHandler('admin', admin_panel),  # Admin paneli komutunu ekledik
+            CommandHandler('admin', admin_panel),
             MessageHandler((filters.PHOTO | filters.Document.ALL) & ~filters.COMMAND, process_file),
             MessageHandler(filters.TEXT & ~filters.COMMAND, handle_rename_response),
             CallbackQueryHandler(button_callback)
@@ -983,247 +976,55 @@ async def main() -> None:
 
         logger.info("Bot başlatılıyor...")
         
-        # Sağlık kontrolü fonksiyonu
-        async def health_check():
-            try:
-                me = await application.bot.get_me()
-                logger.info(f"Bot sağlık kontrolü başarılı: {me.username}")
-                return True
-            except Exception as e:
-                logger.error(f"Sağlık kontrolü başarısız: {e}")
-                return False
-
-        # Yeniden başlatma fonksiyonu
-        async def restart_bot():
-            nonlocal retry_count
-            retry_count += 1
-            wait_time = min(retry_count * 5, 30)  # Artan bekleme süresi, max 30 saniye
-            
-            logger.warning(f"Bot yeniden başlatılıyor... Deneme: {retry_count}, Bekleme: {wait_time}s")
-            
-            try:
-                await application.stop()
-                await asyncio.sleep(wait_time)
-                await application.initialize()
-                await application.start()
-                await application.updater.start_polling(
-                    poll_interval=1.0,
-                    timeout=60,
-                    bootstrap_retries=-1,
-                    read_timeout=60,
-                    write_timeout=60,
-                    connect_timeout=60,
-                    pool_timeout=60,
-                    drop_pending_updates=True,
-                    allowed_updates=Update.ALL_TYPES
-                )
-                retry_count = 0  # Başarılı başlatma sonrası sayacı sıfırla
-                logger.info("Bot başarıyla yeniden başlatıldı!")
-                return True
-            except Exception as e:
-                logger.error(f"Yeniden başlatma hatası: {e}")
-                return False
-
-        # İlk başlatma
+        # Polling başlat
         await application.initialize()
         await application.start()
         await application.updater.start_polling(
-            poll_interval=1.0,
-            timeout=60,
-            bootstrap_retries=-1,
-            read_timeout=60,
-            write_timeout=60,
-            connect_timeout=60,
-            pool_timeout=60,
             drop_pending_updates=True,
             allowed_updates=Update.ALL_TYPES
         )
         
-        # Message handler'ı ekle - admin işlemleri için
-        async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-            """Mesaj işleyici - admin işlemleri için"""
-            if 'admin_state' not in context.user_data:
-                return
-            
-            if not user_manager.is_admin(update.effective_user.username):
-                await update.message.reply_text("⛔️ Admin yetkisine sahip değilsiniz!")
-                return
-
-            state = context.user_data['admin_state']
-            
-            if state == 'waiting_broadcast':
-                # Duyuru mesajını tüm kullanıcılara gönder
-                broadcast_msg = update.message.text
-                success = 0
-                failed = 0
-                
-                # Tüm kullanıcıları al (premium ve normal)
-                all_users = set()
-                for file in USER_CREDITS_DIR.glob("*.json"):
-                    all_users.add(int(file.stem))
-                
-                for user_id in all_users:
-                    try:
-                        await context.bot.send_message(
-                            chat_id=user_id,
-                            text=f"📢 *Duyuru*\n\n{broadcast_msg}",
-                            parse_mode='Markdown'
-                        )
-                        success += 1
-                    except Exception as e:
-                        logger.error(f"Duyuru gönderme hatası (User: {user_id}): {e}")
-                        failed += 1
-                
-                await update.message.reply_text(
-                    f"📊 *Duyuru İstatistikleri*\n\n"
-                    f"✅ Başarılı: {success}\n"
-                    f"❌ Başarısız: {failed}",
-                    parse_mode='Markdown'
-                )
-                
-            elif state == 'waiting_premium_user':
-                # Premium ver
-                try:
-                    user_input = update.message.text
-                    user_id = int(user_input) if user_input.isdigit() else None
-                    
-                    if user_id:
-                        user_manager.add_premium(user_id)
-                        await update.message.reply_text(
-                            f"✅ Premium üyelik eklendi!\n"
-                            f"👤 Kullanıcı ID: {user_id}"
-                        )
-                    else:
-                        await update.message.reply_text("❌ Geçersiz kullanıcı ID'si!")
-                except Exception as e:
-                    await update.message.reply_text(f"❌ Hata: {e}")
-                    
-            elif state == 'waiting_ban_user':
-                # Kullanıcıyı yasakla
-                try:
-                    user_input = update.message.text
-                    user_id = int(user_input) if user_input.isdigit() else None
-                    
-                    if user_id:
-                        user_manager.ban_user(user_id)
-                        await update.message.reply_text(
-                            f"✅ Kullanıcı yasaklandı!\n"
-                            f"👤 Kullanıcı ID: {user_id}"
-                        )
-                    else:
-                        await update.message.reply_text("❌ Geçersiz kullanıcı ID'si!")
-                except Exception as e:
-                    await update.message.reply_text(f"❌ Hata: {e}")
-                    
-            elif state == 'waiting_unban_user':
-                # Yasağı kaldır
-                try:
-                    user_input = update.message.text
-                    user_id = int(user_input) if user_input.isdigit() else None
-                    
-                    if user_id:
-                        user_manager.unban_user(user_id)
-                        await update.message.reply_text(
-                            f"✅ Kullanıcının yasağı kaldırıldı!\n"
-                            f"👤 Kullanıcı ID: {user_id}"
-                        )
-                    else:
-                        await update.message.reply_text("❌ Geçersiz kullanıcı ID'si!")
-                except Exception as e:
-                    await update.message.reply_text(f"❌ Hata: {e}")
-            
-            # İşlem bittikten sonra state'i temizle
-            del context.user_data['admin_state']
-
-        application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_handler))
-
-        # Sonsuz döngüde bekle ve bağlantıyı kontrol et
+        # Sonsuz döngüde bekle
         while True:
-            try:
-                await asyncio.sleep(30)  # Her 30 saniyede bir kontrol
-                
-                # Sağlık kontrolü
-                if not await health_check():
-                    if retry_count >= max_retries:
-                        logger.critical("Maksimum yeniden başlatma denemesi aşıldı!")
-                        raise Exception("Bot kritik hata - yeniden başlatma limiti aşıldı")
-                    
-                    if not await restart_bot():
-                        continue
-                
-                # Bellek kullanımını kontrol et
-                process = psutil.Process(os.getpid())
-                memory_usage = process.memory_info().rss / 1024 / 1024  # MB cinsinden
-                logger.info(f"Bellek kullanımı: {memory_usage:.2f} MB")
-                
-                # Yüksek bellek kullanımında yeniden başlat
-                if memory_usage > 500:  # 500MB üzerinde
-                    logger.warning("Yüksek bellek kullanımı tespit edildi, yeniden başlatılıyor...")
-                    await restart_bot()
-                
-            except asyncio.CancelledError:
-                raise
-            except Exception as e:
-                logger.error(f"Döngü hatası: {e}")
-                await asyncio.sleep(5)
+            await asyncio.sleep(1)
             
-    except telegram.error.NetworkError as e:
-        logger.error(f"Ağ hatası: {e}")
     except Exception as e:
-        logger.error(f"Kritik hata: {e}", exc_info=True)
+        logger.error(f"Hata: {e}", exc_info=True)
     finally:
         if application:
-            try:
-                await application.stop()
-                logger.info("Bot düzgün şekilde kapatıldı.")
-            except Exception as e:
-                logger.error(f"Kapatma hatası: {e}")
+            await application.stop()
 
 if __name__ == '__main__':
-    # Hata ayıklama modunu etkinleştir
-    logging.basicConfig(
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        level=logging.INFO
-    )
-    
-    # Sinyal işleyicileri
-    def signal_handler(signum, frame):
-        logger.info(f"Sinyal alındı: {signum}")
-        raise KeyboardInterrupt
+    # Önceki process'leri temizle
+    try:
+        import psutil
+        current_pid = os.getpid()
+        for proc in psutil.process_iter(['pid', 'name']):
+            if proc.info['name'] == 'python' and proc.info['pid'] != current_pid:
+                try:
+                    os.kill(proc.info['pid'], 9)
+                    logger.info(f"Eski process sonlandırıldı: {proc.info['pid']}")
+                except:
+                    pass
+        time.sleep(2)  # Process'lerin kapanmasını bekle
+    except:
+        pass
 
-    signal.signal(signal.SIGINT, signal_handler)
-    signal.signal(signal.SIGTERM, signal_handler)
+    # Event loop'u temizle
+    try:
+        loop = asyncio.get_event_loop()
+        loop.close()
+    except:
+        pass
+
+    # Yeni event loop oluştur
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
     
-    while True:
-        try:
-            # Önceki process'leri temizle
-            current_pid = os.getpid()
-            for proc in psutil.process_iter(['pid', 'name']):
-                if proc.info['name'] == 'python' and proc.info['pid'] != current_pid:
-                    try:
-                        os.kill(proc.info['pid'], signal.SIGTERM)
-                        logger.info(f"Eski process sonlandırıldı: {proc.info['pid']}")
-                    except:
-                        pass
-            
-            # Event loop'u temizle ve yeniden başlat
-            try:
-                loop = asyncio.get_event_loop()
-                if loop.is_running():
-                    loop.stop()
-                    loop.close()
-            except:
-                pass
-            
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            
-            # Botu başlat
-            loop.run_until_complete(main())
-            
-        except KeyboardInterrupt:
-            logger.info("Bot kullanıcı tarafından durduruldu.")
-            break
-        except Exception as e:
-            logger.error(f"Kritik hata, yeniden başlatılıyor: {e}")
-            time.sleep(5)
+    # Botu başlat
+    try:
+        loop.run_until_complete(main())
+    except KeyboardInterrupt:
+        logger.info("Bot kullanıcı tarafından durduruldu!")
+    finally:
+        loop.close()
