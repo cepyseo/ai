@@ -5,8 +5,8 @@ from services.chat_service import ChatService
 from services.user_service import UserService
 from admin_utils import UserManager
 from datetime import datetime
-from main import handle_admin_actions, check_credits, update_credits  # Admin handler'ını import et
-from handlers.admin_handlers import handle_admin_actions  # Yeni import
+from utils.credits import check_credits, update_credits
+from handlers.admin_handlers import handle_admin_actions
 
 logger = logging.getLogger(__name__)
 chat_service = ChatService()

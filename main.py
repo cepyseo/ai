@@ -31,6 +31,8 @@ from handlers.callback_handlers import handle_callback_query
 from handlers.chat_handlers import handle_chat
 from services.user_service import UserService
 from services.chat_service import ChatService
+from handlers.admin_handlers import handle_admin_actions
+from utils.credits import check_credits, update_credits
 
 # Zaman dilimi ayarı
 os.environ['TZ'] = 'UTC'  # UTC zaman dilimini ayarla
