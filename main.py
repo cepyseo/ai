@@ -901,135 +901,50 @@ async def view_default_thumb(update: Update, context: ContextTypes.DEFAULT_TYPE)
 # AI Sohbet Fonksiyonu
 @require_credits('ai_chat')
 async def ai_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Yapay zeka ile sohbet"""
-    user_id = update.effective_user.id
-    is_member = await check_membership(user_id, context.bot, CHANNEL_USERNAME)
-
-    if not is_member:
-        await context.bot.send_message(
-            chat_id=update.effective_chat.id,
-            text=f"🔒 Lütfen botu kullanabilmek için {CHANNEL_USERNAME} kanalına katılın.",
-            parse_mode='Markdown'
-        )
-        return
-
-    if not context.args:
-        await update.message.reply_text(
-            "ℹ️ Lütfen bir soru veya istem girin:\n"
-            "`/ai <mesajınız>`\n\n"
-            "Diğer AI Komutları:\n"
-            "- `/ai_clear`: Sohbet geçmişini temizler\n"
-            "- `/ai_history`: Sohbet geçmişini gösterir\n\n"
-            "Örnek: `/ai Python nedir?`",
-            parse_mode='Markdown'
-        )
-        return
-
-    command = context.args[0].lower()
-    chat_history = ChatHistory(user_id)
-
-    # Özel komutları kontrol et
-    if command == 'clear':
-        chat_history.clear()
-        await update.message.reply_text("🗑️ Sohbet geçmişi temizlendi!")
-        return
-    elif command == 'history':
-        context_text = chat_history.get_context()
-        if context_text:
-            await update.message.reply_text(
-                f"📜 *Sohbet Geçmişi:*\n\n{context_text}",
-                parse_mode='Markdown'
-            )
-        else:
-            await update.message.reply_text("📝 Henüz sohbet geçmişi yok.")
-        return
-
-    # Normal sohbet işlemi
-    prompt = " ".join(context.args)
-    
+    """AI sohbeti başlat"""
     try:
-        wait_message = await update.message.reply_text(
-            "🤔 Düşünüyorum...",
-            parse_mode='Markdown'
-        )
-
-        # Geçmiş bağlamını ekle
-        context_text = chat_history.get_context()
-        if context_text:
-            enhanced_prompt = f"{context_text}\n\nYeni soru: {prompt}\n\nYukarıdaki konuşma geçmişini dikkate alarak yanıt ver:"
-        else:
-            enhanced_prompt = prompt
-
-        # API isteği
-        api_url = "https://darkness.ashlynn.workers.dev/chat/"
-        params = {
-            "prompt": enhanced_prompt,
-            "model": "meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo",
-            "stream": "false",
-            "temperature": 0.7
-        }
-
-        response = requests.get(
-            api_url,
-            params=params,
-            headers={
-                'User-Agent': 'Mozilla/5.0',
-                'Accept': 'application/json'
-            },
-            verify=False,
-            timeout=60
-        )
-        response.raise_for_status()
-        data = response.json()
-
-        await wait_message.delete()
-
-        # Yanıtı işle ve gönder
-        if data and isinstance(data, str):
-            response_text = data
-        elif data and isinstance(data, dict) and data.get("response"):
-            response_text = data['response']
-        else:
-            response_text = "❌ Üzgünüm, yanıt alınamadı."
-
-        # Geçmişe ekle
-        chat_history.add_message('user', prompt)
-        chat_history.add_message('assistant', response_text)
-
-        # Yanıtı gönder
+        user_id = update.effective_user.id
+        
+        # Yasaklı kullanıcı kontrolü
+        if user_manager.is_banned(user_id):
+            await update.message.reply_text("⛔️ Bottan yasaklandınız!")
+            return
+            
+        # AI sohbeti aktifleştir
+        context.user_data['ai_chat_active'] = True
+        
         await update.message.reply_text(
-            f"🤖 *AI Yanıtı:*\n\n{response_text}",
+            "🤖 *AI Sohbet Başlatıldı*\n\n"
+            "• Benimle istediğiniz konuda sohbet edebilirsiniz\n"
+            "• Sohbeti sonlandırmak için /ai_clear yazın\n"
+            "• Sohbet geçmişini görmek için /ai_history yazın",
             parse_mode='Markdown'
         )
-
+        
     except Exception as e:
-        logger.error(f"AI sohbet hatası: {e}")
-        await update.message.reply_text(
-            "❌ Beklenmeyen bir hata oluştu. Lütfen daha sonra tekrar deneyin.",
-            parse_mode='Markdown'
-        )
+        logger.error(f"AI sohbet başlatma hatası: {e}")
+        await update.message.reply_text("❌ Sohbet başlatılırken bir hata oluştu!")
 
 # Yeni ayrı komutlar ekle
 async def ai_clear(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """AI sohbet geçmişini temizle"""
-    user_id = update.effective_user.id
-    chat_history = ChatHistory(user_id)
-    chat_history.clear()
-    await update.message.reply_text("🗑️ Sohbet geçmişi temizlendi!")
-
-async def ai_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """AI sohbet geçmişini göster"""
-    user_id = update.effective_user.id
-    chat_history = ChatHistory(user_id)
-    context_text = chat_history.get_context()
-    
-    if context_text:
+    try:
+        user_id = update.effective_user.id
+        
+        # AI sohbeti deaktif et
+        context.user_data['ai_chat_active'] = False
+        
+        # Sohbet geçmişini temizle
+        await chat_service.clear_history(user_id)
+        
         await update.message.reply_text(
-            f"📜 *Sohbet Geçmişi:*\n\n{context_text}",
-            parse_mode='Markdown'
+            "🗑 Sohbet geçmişi temizlendi!\n"
+            "Yeni bir sohbet başlatmak için /ai yazın."
         )
-    else:
-        await update.message.reply_text("📝 Henüz sohbet geçmişi yok.")
+        
+    except Exception as e:
+        logger.error(f"Sohbet temizleme hatası: {e}")
+        await update.message.reply_text("❌ Sohbet geçmişi temizlenirken bir hata oluştu!")
 
 # Admin komutları
 async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1298,21 +1213,19 @@ async def init_application():
     # Handler'ları ekle
     handlers = [
         CommandHandler('start', start),
-        CommandHandler('img', get_image),
-        CommandHandler('kanal', channel_info),
-        CommandHandler('rename', rename_file),
-        CommandHandler('thumb', add_thumbnail),
-        CommandHandler('del_thumb', delete_default_thumb),
-        CommandHandler('view_thumb', view_default_thumb),
+        CommandHandler('admin', admin_panel),
+        CommandHandler('cancel', cancel_admin_action),
         CommandHandler('ai', ai_chat),
         CommandHandler('ai_clear', ai_clear),
         CommandHandler('ai_history', ai_history),
-        CommandHandler('admin', admin_panel),
-        CommandHandler('cancel', cancel_admin_action),
+        CommandHandler('img', get_image),
         CommandHandler('stats', show_stats),
+        CommandHandler('thumb', add_thumbnail),
+        CommandHandler('del_thumb', delete_default_thumb),
+        CommandHandler('view_thumb', view_default_thumb),
+        CallbackQueryHandler(handle_callback_query),  # Callback'leri önce işle
         MessageHandler((filters.PHOTO | filters.Document.ALL) & ~filters.COMMAND, process_file),
-        MessageHandler(filters.TEXT & ~filters.COMMAND, handle_chat),
-        CallbackQueryHandler(handle_callback_query)
+        MessageHandler(filters.TEXT & ~filters.COMMAND, handle_chat)  # En son normal mesajları işle
     ]
 
     for handler in handlers:
