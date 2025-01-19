@@ -1246,15 +1246,20 @@ async def handle_admin_actions(update: Update, context: ContextTypes.DEFAULT_TYP
                 # Her hedef için duyuru gönder
                 for target_id in all_targets:
                     try:
-                        # Her hedef için yeni bir bot instance'ı kullan
-                        bot = context.bot._bot
-                        await bot.send_message(
+                        # Bot instance'ını doğru şekilde kullan
+                        await context.bot.send_message(
                             chat_id=target_id,
                             text=f"📢 *DUYURU*\n\n{broadcast_msg}",
                             parse_mode='Markdown'
                         )
                         success += 1
                         logger.info(f"Duyuru başarıyla gönderildi: {target_id}")
+                    except telegram.error.Forbidden:
+                        logger.warning(f"Bot, hedef kullanıcıya mesaj gönderemiyor: {target_id}")
+                        failed += 1
+                    except telegram.error.BadRequest as e:
+                        logger.warning(f"Geçersiz hedef ID veya diğer Telegram hatası: {target_id}, {e}")
+                        failed += 1
                     except Exception as e:
                         logger.error(f"Duyuru gönderme hatası (Target: {target_id}): {e}")
                         failed += 1
@@ -1263,10 +1268,14 @@ async def handle_admin_actions(update: Update, context: ContextTypes.DEFAULT_TYP
                         if success % 5 == 0 or success + failed == total_targets:
                             try:
                                 await status_msg.edit_text(
-                                    f"📤 Duyuru gönderiliyor... ({success}/{total_targets})"
+                                    f"📤 Duyuru gönderiliyor...\n\n"
+                                    f"✅ Başarılı: {success}\n"
+                                    f"❌ Başarısız: {failed}\n"
+                                    f"👥 Toplam: {total_targets}"
                                 )
-                            except Exception as e:
-                                logger.error(f"Durum mesajı güncellenemedi: {e}")
+                            except telegram.error.BadRequest as e:
+                                if "message is not modified" not in str(e).lower():
+                                    logger.error(f"Durum mesajı güncellenemedi: {e}")
                 
                 try:
                     await status_msg.edit_text(
