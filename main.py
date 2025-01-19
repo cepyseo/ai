@@ -74,8 +74,7 @@ def home():
 def webhook():
     """Telegram webhook handler"""
     if request.method == 'POST':
-        # JSON verisini al
-        update_dict = request.get_json(force=True)
+        update = Update.de_json(request.get_json(force=True), application.bot)
         
         # Event loop'u al veya oluştur
         try:
@@ -85,11 +84,14 @@ def webhook():
             asyncio.set_event_loop(loop)
         
         # Update'i işle
-        update = Update.de_json(update_dict, application.bot)
-        loop.run_until_complete(application.process_update(update))
-        
+        loop.run_until_complete(handle_update(update))
         return 'OK'
     return 'OK'
+
+async def handle_update(update: Update):
+    """Update'i işle"""
+    await application.initialize()
+    await application.process_update(update)
 
 def run_flask():
     # Render için port ayarı
@@ -1072,7 +1074,7 @@ async def cancel_admin_action(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 # Ana Fonksiyon
 async def main() -> None:
-    global application  # Global olarak tanımla
+    global application
     
     try:
         # Bot yapılandırması
@@ -1111,6 +1113,7 @@ async def main() -> None:
         WEBHOOK_URL = f"https://{os.environ.get('RENDER_EXTERNAL_HOSTNAME')}/{TOKEN}"
         
         # Webhook'u ayarla
+        await application.initialize()
         await application.bot.set_webhook(
             url=WEBHOOK_URL,
             allowed_updates=Update.ALL_TYPES,
