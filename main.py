@@ -1229,45 +1229,38 @@ async def cancel_admin_action(update: Update, context: ContextTypes.DEFAULT_TYPE
     else:
         await update.message.reply_text("ℹ️ İptal edilecek bir işlem yok.")
 
-# Webhook ve keep-alive için yeni ayarlar
+# Render için özel ayarlar
+RENDER_EXTERNAL_URL = os.environ.get('RENDER_EXTERNAL_URL')
+RENDER_PORT = int(os.environ.get("PORT", 10000))
+
 async def setup_webhook(application):
     """Webhook'u ayarla"""
     try:
-        WEBHOOK_URL = f"https://{os.environ.get('RENDER_EXTERNAL_HOSTNAME')}/{TOKEN}"
-        
+        if RENDER_EXTERNAL_URL:
+            WEBHOOK_URL = f"https://{RENDER_EXTERNAL_URL}/{TOKEN}"
+        else:
+            logger.warning("RENDER_EXTERNAL_URL bulunamadı, webhook kullanılamayacak")
+            return False
+            
         # Önce mevcut webhook'u temizle
         await application.bot.delete_webhook(drop_pending_updates=True)
-        logger.info("Eski webhook temizlendi")
         
         # Yeni webhook'u ayarla
         success = await application.bot.set_webhook(
             url=WEBHOOK_URL,
             allowed_updates=['message', 'callback_query', 'channel_post', 'edited_message'],
             drop_pending_updates=True,
-            max_connections=100
+            max_connections=40  # Render Free tier için optimize edildi
         )
         
         if success:
             logger.info(f"Webhook başarıyla ayarlandı: {WEBHOOK_URL}")
-        else:
-            logger.error("Webhook ayarlanamadı!")
+            return True
+        return False
             
-        # Webhook bilgisini kontrol et
-        webhook_info = await application.bot.get_webhook_info()
-        logger.info(f"Webhook durumu: {webhook_info.to_dict()}")
-        
     except Exception as e:
         logger.error(f"Webhook ayarlama hatası: {e}", exc_info=True)
-        raise
-
-# Ağ ayarları ve timeout sabitleri
-CONNECT_TIMEOUT = 30.0  # Bağlantı timeout süresi
-READ_TIMEOUT = 30.0    # Okuma timeout süresi
-WRITE_TIMEOUT = 30.0   # Yazma timeout süresi
-POOL_TIMEOUT = 30.0    # Havuz timeout süresi
-
-# Port ayarları
-PORT = int(os.environ.get("PORT", 10000))  # Render için varsayılan port
+        return False
 
 async def init_application():
     """Bot uygulamasını başlat"""
@@ -1343,38 +1336,48 @@ async def start_bot(application: Application) -> None:
             break
 
 async def main() -> None:
-    """
-    Ana uygulama başlatma fonksiyonu
-    """
-    # Loglama ayarlarını yükle
-    setup_logging()
-    
-    # Uygulama oluştur
-    application = await init_application()
-    await application.initialize()
-    logger.info("Bot başlatıldı")
-    
-    # Webhook'u ayarla
-    await setup_webhook(application)
-    
-    # Bot'u başlat
-    await start_bot(application)
-    logger.info("Application başlatıldı")
-    
-    # Web uygulamasını başlat
-    app.bot_application = application  # Global app'e application'ı ekle
-    
-    # Hypercorn config
-    config = Config()
-    config.bind = [f"0.0.0.0:{PORT}"]
-    config.use_reloader = False
-    
-    logger.info(f"Web uygulaması {PORT} portunda başlatılıyor...")
-    await serve(app, config)
-    
-    # Temizlik işlemleri
-    await application.stop()
-    await application.shutdown()
+    """Ana uygulama başlatma fonksiyonu"""
+    try:
+        # Loglama ayarlarını yükle
+        setup_logging()
+        
+        # Uygulama oluştur
+        application = await init_application()
+        await application.initialize()
+        logger.info("Bot başlatıldı")
+        
+        # Web uygulamasını başlat
+        app.bot_application = application
+        
+        # Hypercorn config
+        config = Config()
+        config.bind = [f"0.0.0.0:{RENDER_PORT}"]
+        config.use_reloader = False
+        config.workers = 1  # Render Free tier için optimize edildi
+        config.graceful_timeout = 10
+        config.timeout_keep_alive = 30
+        
+        # Webhook'u ayarla
+        webhook_success = await setup_webhook(application)
+        
+        if webhook_success:
+            logger.info(f"Web uygulaması {RENDER_PORT} portunda başlatılıyor (Webhook modu)...")
+            await serve(app, config)
+        else:
+            logger.info("Polling modunda başlatılıyor...")
+            await application.run_polling(
+                drop_pending_updates=True,
+                allowed_updates=["message", "callback_query", "chat_member"]
+            )
+            
+    except Exception as e:
+        logger.critical(f"Kritik hata: {e}", exc_info=True)
+        raise
+    finally:
+        # Temizlik işlemleri
+        if 'application' in locals():
+            await application.stop()
+            await application.shutdown()
 
 # Quart app ayarlarını güncelle
 app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024  # 10MB
