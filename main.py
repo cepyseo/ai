@@ -72,6 +72,48 @@ USER_DATA_DIR.mkdir(exist_ok=True)
 CHAT_HISTORY_DIR.mkdir(exist_ok=True)
 USER_CREDITS_DIR.mkdir(exist_ok=True)  # Eklendi
 
+def setup_project():
+    """Proje yapısını oluştur"""
+    try:
+        # Dizin yapılandırması
+        directories = [
+            'config',
+            'handlers',
+            'services',
+            'utils',
+            'web',
+            'data/user_data',
+            'data/chat_history',
+            'data/user_credits',
+            'data/backups',
+            'data/lang'
+        ]
+        
+        for directory in directories:
+            Path(directory).mkdir(parents=True, exist_ok=True)
+            init_file = Path(directory) / '__init__.py'
+            if not init_file.exists():
+                init_file.touch()
+
+        # Varsayılan dil dosyasını oluştur
+        lang_file = Path('data/lang/tr.json')
+        if not lang_file.exists():
+            default_translations = {
+                "welcome": "Hoş geldiniz!",
+                "help": "Yardım menüsü",
+                "settings": "Ayarlar",
+                "error": "Bir hata oluştu",
+                "success": "İşlem başarılı"
+            }
+            with open(lang_file, 'w', encoding='utf-8') as f:
+                json.dump(default_translations, f, ensure_ascii=False, indent=2)
+                
+        logger.info("Proje yapısı başarıyla oluşturuldu")
+        
+    except Exception as e:
+        logger.error(f"Proje yapısı oluşturulurken hata: {e}")
+        raise
+
 @app.route('/')
 async def home():
     return "Bot çalışıyor!"
@@ -1203,6 +1245,11 @@ async def main():
         # Bot'u başlat
         application = await init_application()
         await application.initialize()
+        
+        # Webhook'u ayarla
+        await setup_webhook()
+        
+        # Bot'u başlat
         await application.start()
         
         # Web uygulamasını başlat
@@ -1224,4 +1271,4 @@ if __name__ == '__main__':
         except Exception as e:
             retry_count += 1
             logger.error(f"Yeniden başlatılıyor ({retry_count}/{max_retries})")
-            asyncio.sleep(5 * retry_count)
+            time.sleep(5 * retry_count)
