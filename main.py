@@ -946,6 +946,51 @@ async def ai_clear(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Sohbet temizleme hatası: {e}")
         await update.message.reply_text("❌ Sohbet geçmişi temizlenirken bir hata oluştu!")
 
+# AI History fonksiyonunu ekle
+async def ai_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """AI sohbet geçmişini göster"""
+    try:
+        user_id = update.effective_user.id
+        
+        # Yasaklı kullanıcı kontrolü
+        if user_manager.is_banned(user_id):
+            await update.message.reply_text("⛔️ Bottan yasaklandınız!")
+            return
+            
+        # Sohbet geçmişini al
+        history = await chat_service.get_history(user_id)
+        
+        if not history:
+            await update.message.reply_text(
+                "📝 Henüz sohbet geçmişi yok.\n"
+                "Sohbet başlatmak için /ai yazın."
+            )
+            return
+            
+        # Geçmişi formatlı şekilde göster
+        history_text = "📜 *Sohbet Geçmişi*\n\n"
+        
+        for msg in history:
+            if msg['role'] == 'user':
+                history_text += f"👤 *Siz:* {msg['content']}\n\n"
+            else:
+                history_text += f"🤖 *Bot:* {msg['content']}\n\n"
+        
+        # Uzun mesajları böl
+        if len(history_text) > 4000:
+            history_text = history_text[:3997] + "..."
+            
+        await update.message.reply_text(
+            history_text,
+            parse_mode='Markdown'
+        )
+        
+    except Exception as e:
+        logger.error(f"Sohbet geçmişi gösterme hatası: {e}")
+        await update.message.reply_text(
+            "❌ Sohbet geçmişi alınırken bir hata oluştu!"
+        )
+
 # Admin komutları
 async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Admin paneli"""
