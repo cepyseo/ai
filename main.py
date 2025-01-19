@@ -269,106 +269,59 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # Callback sorgularını işle
 async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Buton callback'lerini işle"""
     query = update.callback_query
     await query.answer()  # Kullanıcıya geri bildirim gönder
+    
+    if not user_manager.is_admin(query.from_user.username):
+        await query.message.edit_text("⛔️ Admin yetkisine sahip değilsiniz!")
+        return
 
-    # Admin işlemleri
-    if query.data.startswith("admin_"):
-        if not user_manager.is_admin(query.from_user.username):
-            await query.edit_message_text("⛔️ Bu işlemi yapma yetkiniz yok!")
-            return
-
-        if query.data == "admin_broadcast":
-            context.user_data['admin_state'] = 'waiting_broadcast'
-            await query.edit_message_text(
-                "📢 *Duyuru Mesajını Girin*\n\n"
-                "İptal etmek için /cancel yazın.",
-                parse_mode='Markdown'
-            )
-
-        elif query.data == "admin_premium":
-            context.user_data['admin_state'] = 'waiting_premium_user'
-            await query.edit_message_text(
-                "👑 *Premium Üyelik*\n\n"
-                "Kullanıcı ID veya kullanıcı adını girin.\n"
-                "İptal etmek için /cancel yazın.",
-                parse_mode='Markdown'
-            )
-
-        elif query.data == "admin_ban":
-            context.user_data['admin_state'] = 'waiting_ban_user'
-            await query.edit_message_text(
-                "🚫 *Kullanıcı Yasakla*\n\n"
-                "Yasaklanacak kullanıcının ID veya kullanıcı adını girin.\n"
-                "İptal etmek için /cancel yazın.",
-                parse_mode='Markdown'
-            )
-
-        elif query.data == "admin_unban":
-            context.user_data['admin_state'] = 'waiting_unban_user'
-            await query.edit_message_text(
-                "✅ *Yasak Kaldır*\n\n"
-                "Yasağı kaldırılacak kullanıcının ID veya kullanıcı adını girin.\n"
-                "İptal etmek için /cancel yazın.",
-                parse_mode='Markdown'
-            )
-
-        elif query.data == "admin_stats":
-            # İstatistikleri göster
-            premium_count = len(user_manager.premium_users)
-            banned_count = len(user_manager.banned_users)
-            
-            stats_text = (
-                "📊 *Bot İstatistikleri*\n\n"
-                f"👑 Premium Kullanıcılar: {premium_count}\n"
-                f"🚫 Yasaklı Kullanıcılar: {banned_count}\n"
-            )
-            
-            await query.edit_message_text(
-                stats_text,
-                parse_mode='Markdown'
-            )
-
-    if query.data == "commands":
-        commands_text = (
-            "*📋 Kullanılabilir Komutlar:*\n\n"
-            "🤖 *AI Komutları:*\n"
-            "`/ai` - Yapay zeka ile sohbet\n"
-            "`/ai_history` - Sohbet geçmişini görüntüle\n"
-            "`/ai_clear` - Sohbet geçmişini temizle\n\n"
-            "🖼️ *Görsel Komutları:*\n"
-            "`/img` - Görsel ara\n"
-            "`/thumb` - Küçük resim ekle\n"
-            "`/view_thumb` - Küçük resmi görüntüle\n"
-            "`/del_thumb` - Küçük resmi sil\n\n"
-            "📁 *Dosya Komutları:*\n"
-            "`/rename` - Dosya adı değiştir\n\n"
-            "ℹ️ *Diğer Komutlar:*\n"
-            "`/start` - Botu başlat\n"
-            "`/kanal` - Kanal bilgisi"
+    if query.data == "admin_broadcast":
+        context.user_data['admin_state'] = 'waiting_broadcast'
+        await query.message.edit_text(
+            "📢 *Duyuru Gönderme*\n\n"
+            "Lütfen göndermek istediğiniz duyuru mesajını yazın.\n"
+            "İptal etmek için /cancel yazabilirsiniz.",
+            parse_mode='Markdown'
         )
-        await query.edit_message_text(text=commands_text, parse_mode='Markdown')
-
-    elif query.data == "help":
-        help_text = (
-            "*❓ Nasıl Kullanılır:*\n\n"
-            "*1. AI Sohbet:*\n"
-            "• `/ai merhaba` yazarak sohbete başlayın\n"
-            "• Her türlü sorunuzu sorabilirsiniz\n"
-            "• 24 saat boyunca konuşma bağlamını hatırlar\n\n"
-            "*2. Görsel Arama:*\n"
-            "• `/img kedi` gibi aramalar yapın\n"
-            "• Türkçe aramalar desteklenir\n\n"
-            "*3. Dosya İşlemleri:*\n"
-            "• Dosya gönderin ve yeniden adlandırın\n"
-            "• Küçük resim ekleyin veya silin\n\n"
-            "*🔔 Önemli Notlar:*\n"
-            "• Bot kullanımı için kanala üye olmalısınız\n"
-            "• Dosya boyutu 10MB'ı geçmemelidir\n"
-            "• Desteklenen formatlar: jpg, jpeg, png, gif\n\n"
-            "Sorun yaşarsanız @clonicai ile iletişime geçin."
+    elif query.data == "admin_premium":
+        context.user_data['admin_state'] = 'waiting_premium_user'
+        await query.message.edit_text(
+            "👑 *Premium Üyelik*\n\n"
+            "Premium vermek istediğiniz kullanıcının ID'sini gönderin.\n"
+            "İptal etmek için /cancel yazabilirsiniz.",
+            parse_mode='Markdown'
         )
-        await query.edit_message_text(text=help_text, parse_mode='Markdown')
+    elif query.data == "admin_ban":
+        context.user_data['admin_state'] = 'waiting_ban_user'
+        await query.message.edit_text(
+            "🚫 *Kullanıcı Yasaklama*\n\n"
+            "Yasaklamak istediğiniz kullanıcının ID'sini gönderin.\n"
+            "İptal etmek için /cancel yazabilirsiniz.",
+            parse_mode='Markdown'
+        )
+    elif query.data == "admin_unban":
+        context.user_data['admin_state'] = 'waiting_unban_user'
+        await query.message.edit_text(
+            "✅ *Yasak Kaldırma*\n\n"
+            "Yasağını kaldırmak istediğiniz kullanıcının ID'sini gönderin.\n"
+            "İptal etmek için /cancel yazabilirsiniz.",
+            parse_mode='Markdown'
+        )
+    elif query.data == "admin_stats":
+        # İstatistikleri hesapla
+        total_users = len(list(USER_DATA_DIR.glob("*.json")))
+        premium_users = len(user_manager.premium_users)
+        banned_users = len(user_manager.banned_users)
+        
+        await query.message.edit_text(
+            f"📊 *Bot İstatistikleri*\n\n"
+            f"👥 Toplam Kullanıcı: {total_users}\n"
+            f"👑 Premium Üyeler: {premium_users}\n"
+            f"🚫 Yasaklı Kullanıcılar: {banned_users}",
+            parse_mode='Markdown'
+        )
 
 # Görsel Alma Fonksiyonu
 @require_credits('image_search')
@@ -968,21 +921,33 @@ async def ai_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # Admin komutları
 async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Admin paneli"""
-    if not user_manager.is_admin(update.effective_user.username):
-        await update.message.reply_text("⛔️ Admin yetkisine sahip değilsiniz!")
+    user = update.effective_user
+    if not user_manager.is_admin(user.username):
+        await update.message.reply_text("⛔️ Bu komutu kullanma yetkiniz yok!")
         return
 
-    # Admin state'i ayarla
-    context.user_data['admin_state'] = 'waiting_broadcast'
+    keyboard = [
+        [
+            InlineKeyboardButton("📢 Duyuru Yap", callback_data="admin_broadcast"),
+            InlineKeyboardButton("👑 Premium Ver", callback_data="admin_premium")
+        ],
+        [
+            InlineKeyboardButton("🚫 Kullanıcı Yasakla", callback_data="admin_ban"),
+            InlineKeyboardButton("✅ Yasak Kaldır", callback_data="admin_unban")
+        ],
+        [
+            InlineKeyboardButton("📊 İstatistikler", callback_data="admin_stats")
+        ]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
     
     await update.message.reply_text(
-        "📢 *Duyuru Gönderme*\n\n"
-        "Lütfen göndermek istediğiniz duyuru mesajını yazın.\n"
-        "İptal etmek için /cancel yazabilirsiniz.",
-        parse_mode='Markdown'
+        "🔐 *Admin Paneli*\n\n"
+        "Yapmak istediğiniz işlemi seçin:",
+        parse_mode='Markdown',
+        reply_markup=reply_markup
     )
 
-# Message handler'ı ekle - admin işlemleri için
 async def handle_admin_actions(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Admin işlemlerini yöneten handler"""
     try:
@@ -1010,73 +975,25 @@ async def handle_admin_actions(update: Update, context: ContextTypes.DEFAULT_TYP
             try:
                 # Tüm kullanıcıları al
                 all_users = set()
-                valid_users = set()
                 
-                # Debug: Mevcut kullanıcıyı ekle
-                admin_id = update.effective_user.id
-                all_users.add(admin_id)
-                logger.info(f"Admin ID eklendi: {admin_id}")
-                
-                # Chat geçmişi klasöründen kullanıcıları al
-                if CHAT_HISTORY_DIR.exists():
-                    logger.info("Chat geçmişi klasörü kontrol ediliyor...")
-                    for file in CHAT_HISTORY_DIR.glob("*.json"):
-                        try:
-                            user_id = int(file.stem)
-                            all_users.add(user_id)
-                            logger.info(f"Chat geçmişinden kullanıcı eklendi: {user_id}")
-                        except ValueError:
-                            continue
-                
-                # User data klasöründen kullanıcıları al
-                if USER_DATA_DIR.exists():
-                    logger.info("User data klasörü kontrol ediliyor...")
-                    for file in USER_DATA_DIR.glob("*.json"):
-                        try:
-                            user_id = int(file.stem)
-                            all_users.add(user_id)
-                            logger.info(f"User data'dan kullanıcı eklendi: {user_id}")
-                        except ValueError:
-                            continue
-                
-                # User credits klasöründen kullanıcıları al
-                if USER_CREDITS_DIR.exists():
-                    logger.info("User credits klasörü kontrol ediliyor...")
-                    for file in USER_CREDITS_DIR.glob("*.json"):
-                        try:
-                            user_id = int(file.stem)
-                            all_users.add(user_id)
-                            logger.info(f"User credits'den kullanıcı eklendi: {user_id}")
-                        except ValueError:
-                            continue
+                # Tüm klasörlerden kullanıcıları topla
+                for directory in [USER_DATA_DIR, CHAT_HISTORY_DIR, USER_CREDITS_DIR]:
+                    if directory.exists():
+                        for file in directory.glob("*.json"):
+                            try:
+                                all_users.add(int(file.stem))
+                            except ValueError:
+                                continue
                 
                 # Premium kullanıcıları ekle
                 if hasattr(user_manager, 'premium_users'):
-                    logger.info("Premium kullanıcılar kontrol ediliyor...")
                     for user_id in user_manager.premium_users:
                         try:
-                            user_id = int(user_id)
-                            all_users.add(user_id)
-                            logger.info(f"Premium kullanıcı eklendi: {user_id}")
+                            all_users.add(int(user_id))
                         except (ValueError, TypeError):
                             continue
                 
-                # Kullanıcıları doğrula
-                for user_id in all_users:
-                    try:
-                        # Kullanıcı bilgilerini kontrol et
-                        chat = await context.bot.get_chat(user_id)
-                        if chat:
-                            valid_users.add(user_id)
-                            logger.info(f"Geçerli kullanıcı: {user_id}")
-                    except Exception as e:
-                        logger.warning(f"Geçersiz kullanıcı {user_id}: {e}")
-                        continue
-                
-                logger.info(f"Toplam bulunan kullanıcı sayısı: {len(valid_users)}")
-                logger.info(f"Geçerli kullanıcı listesi: {valid_users}")
-                
-                total_users = len(valid_users)
+                total_users = len(all_users)
                 if total_users == 0:
                     await status_msg.edit_text("❌ Duyuru gönderilebilecek kullanıcı bulunamadı!")
                     del context.user_data['admin_state']
@@ -1087,7 +1004,7 @@ async def handle_admin_actions(update: Update, context: ContextTypes.DEFAULT_TYP
                 success = 0
                 failed = 0
                 
-                for user_id in valid_users:
+                for user_id in all_users:
                     try:
                         await context.bot.send_message(
                             chat_id=user_id,
@@ -1095,8 +1012,6 @@ async def handle_admin_actions(update: Update, context: ContextTypes.DEFAULT_TYP
                             parse_mode='Markdown'
                         )
                         success += 1
-                        logger.info(f"Duyuru başarıyla gönderildi: {user_id}")
-                        await asyncio.sleep(0.05)
                         if success % 5 == 0 or success == total_users:
                             await status_msg.edit_text(
                                 f"📤 Duyuru gönderiliyor... ({success}/{total_users})"
@@ -1104,6 +1019,7 @@ async def handle_admin_actions(update: Update, context: ContextTypes.DEFAULT_TYP
                     except Exception as e:
                         logger.error(f"Duyuru gönderme hatası (User: {user_id}): {e}")
                         failed += 1
+                    finally:
                         await asyncio.sleep(0.05)
                 
                 await status_msg.edit_text(
@@ -1124,6 +1040,36 @@ async def handle_admin_actions(update: Update, context: ContextTypes.DEFAULT_TYP
             finally:
                 if 'admin_state' in context.user_data:
                     del context.user_data['admin_state']
+        
+        elif state == 'waiting_premium_user':
+            try:
+                user_id = int(update.message.text)
+                user_manager.add_premium(user_id)
+                await update.message.reply_text(f"✅ {user_id} ID'li kullanıcıya premium verildi!")
+            except ValueError:
+                await update.message.reply_text("❌ Geçersiz kullanıcı ID'si!")
+            finally:
+                del context.user_data['admin_state']
+        
+        elif state == 'waiting_ban_user':
+            try:
+                user_id = int(update.message.text)
+                user_manager.ban_user(user_id)
+                await update.message.reply_text(f"🚫 {user_id} ID'li kullanıcı yasaklandı!")
+            except ValueError:
+                await update.message.reply_text("❌ Geçersiz kullanıcı ID'si!")
+            finally:
+                del context.user_data['admin_state']
+        
+        elif state == 'waiting_unban_user':
+            try:
+                user_id = int(update.message.text)
+                user_manager.unban_user(user_id)
+                await update.message.reply_text(f"✅ {user_id} ID'li kullanıcının yasağı kaldırıldı!")
+            except ValueError:
+                await update.message.reply_text("❌ Geçersiz kullanıcı ID'si!")
+            finally:
+                del context.user_data['admin_state']
                 
     except Exception as e:
         logger.error(f"Admin handler hatası: {e}")
