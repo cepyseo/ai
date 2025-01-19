@@ -1010,6 +1010,7 @@ async def handle_admin_actions(update: Update, context: ContextTypes.DEFAULT_TYP
             try:
                 # Tüm kullanıcıları al
                 all_users = set()
+                valid_users = set()
                 
                 # Debug: Mevcut kullanıcıyı ekle
                 admin_id = update.effective_user.id
@@ -1060,20 +1061,22 @@ async def handle_admin_actions(update: Update, context: ContextTypes.DEFAULT_TYP
                         except (ValueError, TypeError):
                             continue
                 
-                # Test kullanıcıları ekle (geçici)
-                test_users = [
-                    update.effective_user.id,  # Admin
-                    123456789,  # Test kullanıcı 1
-                    987654321   # Test kullanıcı 2
-                ]
-                for user_id in test_users:
-                    all_users.add(user_id)
-                    logger.info(f"Test kullanıcı eklendi: {user_id}")
+                # Kullanıcıları doğrula
+                for user_id in all_users:
+                    try:
+                        # Kullanıcı bilgilerini kontrol et
+                        chat = await context.bot.get_chat(user_id)
+                        if chat:
+                            valid_users.add(user_id)
+                            logger.info(f"Geçerli kullanıcı: {user_id}")
+                    except Exception as e:
+                        logger.warning(f"Geçersiz kullanıcı {user_id}: {e}")
+                        continue
                 
-                logger.info(f"Toplam bulunan kullanıcı sayısı: {len(all_users)}")
-                logger.info(f"Kullanıcı listesi: {all_users}")
+                logger.info(f"Toplam bulunan kullanıcı sayısı: {len(valid_users)}")
+                logger.info(f"Geçerli kullanıcı listesi: {valid_users}")
                 
-                total_users = len(all_users)
+                total_users = len(valid_users)
                 if total_users == 0:
                     await status_msg.edit_text("❌ Duyuru gönderilebilecek kullanıcı bulunamadı!")
                     del context.user_data['admin_state']
@@ -1084,7 +1087,7 @@ async def handle_admin_actions(update: Update, context: ContextTypes.DEFAULT_TYP
                 success = 0
                 failed = 0
                 
-                for user_id in all_users:
+                for user_id in valid_users:
                     try:
                         await context.bot.send_message(
                             chat_id=user_id,
