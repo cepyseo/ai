@@ -23,6 +23,7 @@ from threading import Thread
 from quart import Quart, request
 from hypercorn.config import Config
 from hypercorn.asyncio import serve
+import httpx
 
 # Zaman dilimi ayarı
 os.environ['TZ'] = 'UTC'  # UTC zaman dilimini ayarla
@@ -72,6 +73,10 @@ USER_CREDITS_DIR.mkdir(exist_ok=True)  # Eklendi
 @app.route('/')
 async def home():
     return "Bot çalışıyor!"
+
+@app.route('/ping')
+async def ping():
+    return 'pong'
 
 @app.route(f'/{TOKEN}', methods=['POST'])
 async def webhook():
@@ -1100,6 +1105,20 @@ async def cancel_admin_action(update: Update, context: ContextTypes.DEFAULT_TYPE
     else:
         await update.message.reply_text("ℹ️ İptal edilecek bir işlem yok.")
 
+async def keep_alive():
+    """Sunucuyu canlı tut"""
+    while True:
+        try:
+            # Her 5 dakikada bir ping at
+            await asyncio.sleep(300)
+            # Kendi URL'mize ping at
+            url = f"https://{os.environ.get('RENDER_EXTERNAL_HOSTNAME')}/ping"
+            async with httpx.AsyncClient() as client:
+                await client.get(url)
+            logger.info("Ping başarılı")
+        except Exception as e:
+            logger.error(f"Ping hatası: {e}")
+
 # Ana Fonksiyon
 async def main() -> None:
     global application
@@ -1149,9 +1168,13 @@ async def main() -> None:
             drop_pending_updates=True
         )
         
+        # Keep alive task'ı başlat
+        asyncio.create_task(keep_alive())
+        
         # Hypercorn config
         config = Config()
         config.bind = ["0.0.0.0:10000"]
+        config.keep_alive_timeout = 120  # Keep-alive timeout'u artır
         
         # Sunucuyu başlat
         await serve(app, config)
