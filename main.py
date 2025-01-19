@@ -1000,35 +1000,47 @@ async def handle_admin_actions(update: Update, context: ContextTypes.DEFAULT_TYP
     state = context.user_data['admin_state']
     
     if state == 'waiting_broadcast':
-        # Duyuru mesajını tüm kullanıcılara gönder
         broadcast_msg = update.message.text
         if broadcast_msg.lower() == '/cancel':
             del context.user_data['admin_state']
             await update.message.reply_text("❌ Duyuru iptal edildi.")
             return
 
-        # İşlem başladı mesajı
-        status_msg = await update.message.reply_text("📢 Duyuru gönderiliyor...")
-        
-        success = 0
-        failed = 0
+        status_msg = await update.message.reply_text("📢 Duyuru hazırlanıyor...")
         
         try:
-            # Tüm kullanıcıları al (premium ve normal)
+            # Tüm kullanıcıları al
             all_users = set()
             
+            # Test kullanıcısı ekle (kendiniz)
+            all_users.add(update.effective_user.id)
+            
             # Premium kullanıcıları ekle
-            for user_id in user_manager.premium_users:
-                all_users.add(int(user_id))
+            if hasattr(user_manager, 'premium_users'):
+                for user_id in user_manager.premium_users:
+                    try:
+                        all_users.add(int(user_id))
+                    except (ValueError, TypeError):
+                        continue
             
             # Normal kullanıcıları ekle
-            for file in USER_CREDITS_DIR.glob("*.json"):
-                try:
-                    all_users.add(int(file.stem))
-                except ValueError:
-                    continue
+            if USER_CREDITS_DIR.exists():
+                for file in USER_CREDITS_DIR.glob("*.json"):
+                    try:
+                        all_users.add(int(file.stem))
+                    except ValueError:
+                        continue
             
             total_users = len(all_users)
+            if total_users == 0:
+                await status_msg.edit_text("❌ Duyuru gönderilebilecek kullanıcı bulunamadı!")
+                del context.user_data['admin_state']
+                return
+            
+            await status_msg.edit_text(f"📢 Duyuru gönderiliyor... (0/{total_users})")
+            
+            success = 0
+            failed = 0
             
             for user_id in all_users:
                 try:
@@ -1038,8 +1050,7 @@ async def handle_admin_actions(update: Update, context: ContextTypes.DEFAULT_TYP
                         parse_mode='Markdown'
                     )
                     success += 1
-                    # Her 10 kullanıcıda bir durum güncellemesi
-                    if success % 10 == 0:
+                    if success % 5 == 0 or success == total_users:
                         await status_msg.edit_text(
                             f"📤 Duyuru gönderiliyor... ({success}/{total_users})"
                         )
@@ -1047,7 +1058,6 @@ async def handle_admin_actions(update: Update, context: ContextTypes.DEFAULT_TYP
                     logger.error(f"Duyuru gönderme hatası (User: {user_id}): {e}")
                     failed += 1
             
-            # Final durum mesajı
             await status_msg.edit_text(
                 f"📊 *Duyuru Tamamlandı*\n\n"
                 f"✅ Başarılı: {success}\n"
@@ -1064,7 +1074,6 @@ async def handle_admin_actions(update: Update, context: ContextTypes.DEFAULT_TYP
                 parse_mode='Markdown'
             )
         
-        # Admin state'i temizle
         del context.user_data['admin_state']
 
 async def cancel_admin_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
