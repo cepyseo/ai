@@ -1011,37 +1011,67 @@ async def handle_admin_actions(update: Update, context: ContextTypes.DEFAULT_TYP
                 # Tüm kullanıcıları al
                 all_users = set()
                 
+                # Debug: Mevcut kullanıcıyı ekle
+                admin_id = update.effective_user.id
+                all_users.add(admin_id)
+                logger.info(f"Admin ID eklendi: {admin_id}")
+                
                 # Chat geçmişi klasöründen kullanıcıları al
                 if CHAT_HISTORY_DIR.exists():
+                    logger.info("Chat geçmişi klasörü kontrol ediliyor...")
                     for file in CHAT_HISTORY_DIR.glob("*.json"):
                         try:
-                            all_users.add(int(file.stem))
+                            user_id = int(file.stem)
+                            all_users.add(user_id)
+                            logger.info(f"Chat geçmişinden kullanıcı eklendi: {user_id}")
                         except ValueError:
                             continue
                 
                 # User data klasöründen kullanıcıları al
                 if USER_DATA_DIR.exists():
+                    logger.info("User data klasörü kontrol ediliyor...")
                     for file in USER_DATA_DIR.glob("*.json"):
                         try:
-                            all_users.add(int(file.stem))
+                            user_id = int(file.stem)
+                            all_users.add(user_id)
+                            logger.info(f"User data'dan kullanıcı eklendi: {user_id}")
                         except ValueError:
                             continue
                 
                 # User credits klasöründen kullanıcıları al
                 if USER_CREDITS_DIR.exists():
+                    logger.info("User credits klasörü kontrol ediliyor...")
                     for file in USER_CREDITS_DIR.glob("*.json"):
                         try:
-                            all_users.add(int(file.stem))
+                            user_id = int(file.stem)
+                            all_users.add(user_id)
+                            logger.info(f"User credits'den kullanıcı eklendi: {user_id}")
                         except ValueError:
                             continue
                 
                 # Premium kullanıcıları ekle
                 if hasattr(user_manager, 'premium_users'):
+                    logger.info("Premium kullanıcılar kontrol ediliyor...")
                     for user_id in user_manager.premium_users:
                         try:
-                            all_users.add(int(user_id))
+                            user_id = int(user_id)
+                            all_users.add(user_id)
+                            logger.info(f"Premium kullanıcı eklendi: {user_id}")
                         except (ValueError, TypeError):
                             continue
+                
+                # Test kullanıcıları ekle (geçici)
+                test_users = [
+                    update.effective_user.id,  # Admin
+                    123456789,  # Test kullanıcı 1
+                    987654321   # Test kullanıcı 2
+                ]
+                for user_id in test_users:
+                    all_users.add(user_id)
+                    logger.info(f"Test kullanıcı eklendi: {user_id}")
+                
+                logger.info(f"Toplam bulunan kullanıcı sayısı: {len(all_users)}")
+                logger.info(f"Kullanıcı listesi: {all_users}")
                 
                 total_users = len(all_users)
                 if total_users == 0:
@@ -1062,7 +1092,8 @@ async def handle_admin_actions(update: Update, context: ContextTypes.DEFAULT_TYP
                             parse_mode='Markdown'
                         )
                         success += 1
-                        await asyncio.sleep(0.05)  # Rate limit'e takılmamak için
+                        logger.info(f"Duyuru başarıyla gönderildi: {user_id}")
+                        await asyncio.sleep(0.05)
                         if success % 5 == 0 or success == total_users:
                             await status_msg.edit_text(
                                 f"📤 Duyuru gönderiliyor... ({success}/{total_users})"
