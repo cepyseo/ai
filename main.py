@@ -71,12 +71,25 @@ def home():
     return "Bot çalışıyor!"
 
 @app.route(f'/{TOKEN}', methods=['POST'])
-async def webhook():
+def webhook():
     """Telegram webhook handler"""
     if request.method == 'POST':
-        update = Update.de_json(request.get_json(force=True), application.bot)
-        await application.process_update(update)
+        # JSON verisini al
+        update_dict = request.get_json(force=True)
+        
+        # Event loop'u al veya oluştur
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+        
+        # Update'i işle
+        update = Update.de_json(update_dict, application.bot)
+        loop.run_until_complete(application.process_update(update))
+        
         return 'OK'
+    return 'OK'
 
 def run_flask():
     # Render için port ayarı
@@ -1106,7 +1119,7 @@ async def main() -> None:
         
         # Flask sunucusunu başlat
         port = int(os.environ.get("PORT", 8080))
-        app.run(host='0.0.0.0', port=port)
+        app.run(host='0.0.0.0', port=port, debug=False)
             
     except Exception as e:
         logger.error(f"Hata: {e}", exc_info=True)

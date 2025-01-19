@@ -3,4 +3,5 @@ pytz
 psutil
 Pillow
 requests
-flask 
+flask[async]
+quart 
