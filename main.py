@@ -472,12 +472,12 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
                     "• /start - Botu başlat\n"
                     "• /help - Yardım menüsü\n\n"
                     "*AI Komutları:*\n"
-                    "• /ai <mesaj> - AI ile sohbet et\n"
+                    "• /ai_chat <mesaj> - AI ile sohbet et\n"
                     "• /ai_clear - Sohbet geçmişini temizle\n"
                     "• /ai_history - Sohbet geçmişini göster\n\n"
                     "*Görsel Komutları:*\n"
-                    "• /img <arama> - Görsel ara\n"
-                    "• /thumb - Dosyaya küçük resim ekle\n"
+                    "• /image <arama> - Görsel ara\n"
+                    "• /add_thumb - Dosyaya küçük resim ekle\n"
                     "• /del_thumb - Varsayılan küçük resmi sil\n"
                     "• /view_thumb - Varsayılan küçük resmi göster\n\n"
                     "*İstatistikler:*\n"
@@ -499,15 +499,15 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
                 help_text = (
                     "🔍 *Yardım Menüsü*\n\n"
                     "*AI Sohbet:*\n"
-                    "• AI ile sohbet etmek için /ai komutunu kullanın\n"
-                    "• Örnek: `/ai merhaba` veya sadece mesaj yazın\n"
+                    "• AI ile sohbet etmek için /ai_chat komutunu kullanın\n"
+                    "• Örnek: `/ai_chat merhaba` veya sadece mesaj yazın\n"
                     "• Sohbeti temizlemek için /ai_clear yazın\n"
                     "• Geçmişi görmek için /ai_history yazın\n\n"
                     "*Görsel Arama:*\n"
-                    "• Görsel aramak için /img komutunu kullanın\n"
-                    "• Örnek: `/img kedi`\n\n"
+                    "• Görsel aramak için /image komutunu kullanın\n"
+                    "• Örnek: `/image kedi`\n\n"
                     "*Dosya İşlemleri:*\n"
-                    "• Dosyalara küçük resim eklemek için /thumb kullanın\n"
+                    "• Dosyalara küçük resim eklemek için /add_thumb kullanın\n"
                     "• Varsayılan küçük resmi silmek için /del_thumb\n"
                     "• Mevcut küçük resmi görmek için /view_thumb\n\n"
                     "*Kredi Sistemi:*\n"
@@ -588,7 +588,7 @@ async def get_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
         await context.bot.send_message(
             chat_id=update.effective_chat.id,
-            text="ℹ️ Lütfen bir arama terimi girin:\n`/img <arama terimi>`",
+            text="ℹ️ Lütfen bir arama terimi girin:\n`/image <arama terimi>`",
             parse_mode='Markdown'
         )
         return
@@ -1075,7 +1075,7 @@ async def ai_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "• Sohbeti sonlandırmak için /ai_clear yazın\n"
                 "• Sohbet geçmişini görmek için /ai_history yazın\n\n"
                 "Örnek kullanım:\n"
-                "`/ai merhaba` veya doğrudan mesaj yazın",
+                "`/ai_chat merhaba` veya doğrudan mesaj yazın",
                 parse_mode='Markdown'
             )
         
@@ -1097,7 +1097,7 @@ async def ai_clear(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         await update.message.reply_text(
             "🗑 Sohbet geçmişi temizlendi!\n"
-            "Yeni bir sohbet başlatmak için /ai yazın."
+            "Yeni bir sohbet başlatmak için /ai_chat yazın."
         )
         
     except Exception as e:
@@ -1121,7 +1121,7 @@ async def ai_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not history:
             await update.message.reply_text(
                 "📝 Henüz sohbet geçmişi yok.\n"
-                "Sohbet başlatmak için /ai yazın."
+                "Sohbet başlatmak için /ai_chat yazın."
             )
             return
             
@@ -1425,17 +1425,17 @@ async def init_application() -> Application:
         )
 
         # Komut handler'ları
-        application.add_handler(CommandHandler("start", start))
-        application.add_handler(CommandHandler("help", help_command))
-        application.add_handler(CommandHandler("admin", admin_panel))
-        application.add_handler(CommandHandler("ai", ai_chat))
-        application.add_handler(CommandHandler("ai_clear", ai_clear))
-        application.add_handler(CommandHandler("ai_history", ai_history))
-        application.add_handler(CommandHandler("img", get_image))
-        application.add_handler(CommandHandler("stats", show_stats))
-        application.add_handler(CommandHandler("thumb", add_thumbnail))
-        application.add_handler(CommandHandler("del_thumb", delete_default_thumb))
-        application.add_handler(CommandHandler("view_thumb", view_default_thumb))
+        application.add_handler(CommandHandler(["start", "başlat"], start))
+        application.add_handler(CommandHandler(["help", "yardım", "h"], help_command))
+        application.add_handler(CommandHandler(["admin", "yönetici"], admin_panel))
+        application.add_handler(CommandHandler(["ai_chat", "chat"], ai_chat))
+        application.add_handler(CommandHandler(["ai_clear", "clear_chat"], ai_clear))
+        application.add_handler(CommandHandler(["ai_history", "chat_history"], ai_history))
+        application.add_handler(CommandHandler(["image", "resim"], get_image))
+        application.add_handler(CommandHandler(["stats", "istatistik"], show_stats))
+        application.add_handler(CommandHandler(["add_thumb", "thumbnail"], add_thumbnail))
+        application.add_handler(CommandHandler(["del_thumb", "delete_thumb"], delete_default_thumb))
+        application.add_handler(CommandHandler(["view_thumb", "show_thumb"], view_default_thumb))
 
         # Callback ve mesaj handler'ları
         application.add_handler(CallbackQueryHandler(handle_callback_query))
