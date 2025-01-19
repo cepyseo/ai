@@ -326,10 +326,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Admin callback'lerini işle"""
     query = update.callback_query
-    user_id = query.from_user.id
+    user = query.from_user
     
-    # Admin kontrolü
-    if not user_manager.is_admin(user_id):
+    # Admin kontrolü - kullanıcı adı ile kontrol
+    if not user_manager.is_admin(user.username):
         await query.answer("⛔️ Bu işlem için yetkiniz yok!", show_alert=True)
         return
         
@@ -1035,6 +1035,8 @@ async def ai_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Admin paneli"""
     user = update.effective_user
+    
+    # Admin kontrolü - kullanıcı adı ile kontrol
     if not user_manager.is_admin(user.username):
         await update.message.reply_text("⛔️ Bu komutu kullanma yetkiniz yok!")
         return

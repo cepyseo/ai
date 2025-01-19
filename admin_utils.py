@@ -20,8 +20,8 @@ class UserManager:
     def __init__(self):
         self.premium_users = self._load_json(PREMIUM_USERS_FILE, {})
         self.banned_users = self._load_json(BANNED_USERS_FILE, {})
-        # Admin listesi
-        self.admin_ids = [7741710212]  # Sizin Telegram ID'niz
+        # Admin listesi - sadece @cepyseo
+        self.admin_username = "cepyseo"  # Sizin Telegram kullanıcı adınız
 
     def _load_json(self, file_path: Path, default_value: dict) -> dict:
         if file_path.exists():
@@ -37,9 +37,11 @@ class UserManager:
         except Exception as e:
             logger.error(f"JSON kaydetme hatası {file_path}: {e}")
 
-    def is_admin(self, user_id: int) -> bool:
+    def is_admin(self, username: str) -> bool:
         """Kullanıcının admin olup olmadığını kontrol et"""
-        return user_id in self.admin_ids
+        if not username:  # username None ise
+            return False
+        return username.lower() == self.admin_username.lower()
 
     def is_premium(self, user_id: int) -> bool:
         """Kullanıcının premium olup olmadığını kontrol et"""
