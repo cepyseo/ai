@@ -934,6 +934,79 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=reply_markup
     )
 
+# Message handler'ı ekle - admin işlemleri için
+async def handle_admin_actions(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Admin işlemlerini yöneten handler"""
+    if not update.message or not update.message.text:
+        return
+
+    if 'admin_state' not in context.user_data:
+        return
+    
+    if not user_manager.is_admin(update.effective_user.username):
+        await update.message.reply_text("⛔️ Admin yetkisine sahip değilsiniz!")
+        return
+
+    state = context.user_data['admin_state']
+    
+    if state == 'waiting_broadcast':
+        # Duyuru mesajını tüm kullanıcılara gönder
+        broadcast_msg = update.message.text
+        if broadcast_msg.lower() == '/cancel':
+            del context.user_data['admin_state']
+            await update.message.reply_text("❌ Duyuru iptal edildi.")
+            return
+
+        # İşlem başladı mesajı
+        status_msg = await update.message.reply_text("📢 Duyuru gönderiliyor...")
+        
+        success = 0
+        failed = 0
+        
+        # Tüm kullanıcıları al (premium ve normal)
+        all_users = set()
+        for file in USER_CREDITS_DIR.glob("*.json"):
+            all_users.add(int(file.stem))
+        
+        total_users = len(all_users)
+        
+        for user_id in all_users:
+            try:
+                await context.bot.send_message(
+                    chat_id=user_id,
+                    text=f"📢 *DUYURU*\n\n{broadcast_msg}",
+                    parse_mode='Markdown'
+                )
+                success += 1
+                # Her 10 kullanıcıda bir durum güncellemesi
+                if success % 10 == 0:
+                    await status_msg.edit_text(
+                        f"📤 Duyuru gönderiliyor... ({success}/{total_users})"
+                    )
+            except Exception as e:
+                logger.error(f"Duyuru gönderme hatası (User: {user_id}): {e}")
+                failed += 1
+        
+        # Final durum mesajı
+        await status_msg.edit_text(
+            f"📊 *Duyuru Tamamlandı*\n\n"
+            f"✅ Başarılı: {success}\n"
+            f"❌ Başarısız: {failed}\n"
+            f"👥 Toplam: {total_users}",
+            parse_mode='Markdown'
+        )
+        
+        # Admin state'i temizle
+        del context.user_data['admin_state']
+
+async def cancel_admin_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Admin işlemini iptal et"""
+    if 'admin_state' in context.user_data:
+        del context.user_data['admin_state']
+        await update.message.reply_text("❌ İşlem iptal edildi.")
+    else:
+        await update.message.reply_text("ℹ️ İptal edilecek bir işlem yok.")
+
 # Ana Fonksiyon
 async def main() -> None:
     application = None
@@ -965,8 +1038,9 @@ async def main() -> None:
             CommandHandler('ai_clear', ai_clear),
             CommandHandler('ai_history', ai_history),
             CommandHandler('admin', admin_panel),
+            CommandHandler('cancel', cancel_admin_action),
             MessageHandler((filters.PHOTO | filters.Document.ALL) & ~filters.COMMAND, process_file),
-            MessageHandler(filters.TEXT & ~filters.COMMAND, handle_rename_response),
+            MessageHandler(filters.TEXT & ~filters.COMMAND, handle_admin_actions),
             CallbackQueryHandler(button_callback)
         ]
 
