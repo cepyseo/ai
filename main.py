@@ -938,31 +938,17 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def main() -> None:
     application = None
     try:
-        # Webhook'u temizle ve bekleyen güncellemeleri sil
+        # Webhook'u temizle
         requests.post(
             f'https://api.telegram.org/bot{TOKEN}/deleteWebhook',
             params={'drop_pending_updates': True}
         )
-        
-        # Mevcut getUpdates isteklerini temizle
-        requests.post(
-            f'https://api.telegram.org/bot{TOKEN}/getUpdates',
-            params={'offset': -1}
-        )
-        
-        # 5 saniye bekle
-        await asyncio.sleep(5)
         
         # Basit yapılandırma
         application = (
             ApplicationBuilder()
             .token(TOKEN)
             .concurrent_updates(False)
-            .connection_pool_size(4)  # Daha düşük pool size
-            .pool_timeout(20)
-            .connect_timeout(20)
-            .read_timeout(20)
-            .write_timeout(20)
             .build()
         )
 
@@ -992,15 +978,7 @@ async def main() -> None:
         # Polling başlat
         await application.initialize()
         await application.start()
-        await application.updater.start_polling(
-            drop_pending_updates=True,
-            allowed_updates=Update.ALL_TYPES,
-            bootstrap_retries=0,  # Yeniden deneme yapma
-            read_timeout=20,
-            write_timeout=20,
-            connect_timeout=20,
-            pool_timeout=20
-        )
+        await application.updater.start_polling(drop_pending_updates=True)
         
         # Sonsuz döngüde bekle
         while True:
@@ -1013,49 +991,43 @@ async def main() -> None:
             await application.stop()
 
 if __name__ == '__main__':
-    # Kilitleme dosyası kontrolü
-    lock_file = Path("bot.lock")
+    # PID dosyası yolu
+    pid_file = Path("bot.pid")
     
     try:
-        if lock_file.exists():
-            # Kilitleme dosyası varsa, PID'yi kontrol et
-            with open(lock_file) as f:
-                old_pid = int(f.read().strip())
+        # Eğer PID dosyası varsa
+        if pid_file.exists():
             try:
-                # Eski process hala çalışıyor mu kontrol et
+                # Eski PID'yi oku
+                old_pid = int(pid_file.read_text().strip())
+                
+                # Process hala çalışıyor mu kontrol et
                 os.kill(old_pid, 0)
+                
+                # Process çalışıyorsa çık
                 logger.error(f"Bot zaten çalışıyor (PID: {old_pid})")
                 sys.exit(1)
-            except OSError:
-                # Process artık yok, kilitleme dosyasını sil
-                lock_file.unlink()
+                
+            except ProcessLookupError:
+                # Process artık yok, PID dosyasını sil
+                pid_file.unlink()
+            except ValueError:
+                # Geçersiz PID, dosyayı sil
+                pid_file.unlink()
         
-        # Yeni kilitleme dosyası oluştur
-        with open(lock_file, 'w') as f:
-            f.write(str(os.getpid()))
+        # Yeni PID dosyası oluştur
+        pid_file.write_text(str(os.getpid()))
         
-        # Event loop'u temizle
         try:
-            loop = asyncio.get_event_loop()
-            loop.close()
-        except:
-            pass
-
-        # Yeni event loop oluştur
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        
-        # Botu başlat
-        try:
-            loop.run_until_complete(main())
-        except KeyboardInterrupt:
-            logger.info("Bot kullanıcı tarafından durduruldu!")
+            # Botu başlat
+            asyncio.run(main())
         finally:
-            loop.close()
-            # Kilitleme dosyasını sil
-            lock_file.unlink()
-            
+            # PID dosyasını temizle
+            if pid_file.exists():
+                pid_file.unlink()
+                
     except Exception as e:
         logger.error(f"Kritik hata: {e}")
-        if lock_file.exists():
-            lock_file.unlink()
+        # Hata durumunda PID dosyasını temizle
+        if pid_file.exists():
+            pid_file.unlink()
