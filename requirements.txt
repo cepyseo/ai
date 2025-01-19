@@ -3,5 +3,5 @@ pytz
 psutil
 Pillow
 requests
-flask[async]
-quart 
+quart>=0.18.0
+hypercorn>=0.14.0 

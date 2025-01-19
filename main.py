@@ -20,6 +20,9 @@ from admin_utils import UserManager, UserCredits
 import sys
 from flask import Flask, request
 from threading import Thread
+from quart import Quart, request
+from hypercorn.config import Config
+from hypercorn.asyncio import serve
 
 # Zaman dilimi ayarı
 os.environ['TZ'] = 'UTC'  # UTC zaman dilimini ayarla
@@ -53,8 +56,8 @@ MAX_HISTORY_LENGTH = 10  # Maksimum kaç mesajı hatırlasın
 # Global değişkenler
 user_manager = UserManager()
 
-# Flask uygulaması
-app = Flask(__name__)
+# Flask yerine Quart kullan
+app = Quart(__name__)
 
 # Dizin sabitleri
 USER_DATA_DIR = Path("user_data")
@@ -67,27 +70,21 @@ CHAT_HISTORY_DIR.mkdir(exist_ok=True)
 USER_CREDITS_DIR.mkdir(exist_ok=True)  # Eklendi
 
 @app.route('/')
-def home():
+async def home():
     return "Bot çalışıyor!"
 
 @app.route(f'/{TOKEN}', methods=['POST'])
-def webhook():
+async def webhook():
     """Telegram webhook handler"""
     if request.method == 'POST':
-        # JSON verisini al
-        update_dict = request.get_json(force=True)
-        update = Update.de_json(update_dict, application.bot)
-        
-        # Yeni event loop oluştur
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
+        json_data = await request.get_json()
+        update = Update.de_json(json_data, application.bot)
         
         try:
-            # Update'i işle
-            loop.run_until_complete(handle_update(update))
-        finally:
-            loop.close()
-            
+            await application.process_update(update)
+        except Exception as e:
+            logger.error(f"Update işleme hatası: {e}")
+        
         return 'OK'
     return 'OK'
 
@@ -1127,9 +1124,12 @@ async def main() -> None:
             drop_pending_updates=True
         )
         
-        # Flask sunucusunu başlat
-        port = int(os.environ.get("PORT", 8080))
-        app.run(host='0.0.0.0', port=port, debug=False)
+        # Hypercorn config
+        config = Config()
+        config.bind = ["0.0.0.0:10000"]
+        
+        # Sunucuyu başlat
+        await serve(app, config)
             
     except Exception as e:
         logger.error(f"Hata: {e}", exc_info=True)
@@ -1156,18 +1156,7 @@ if __name__ == '__main__':
         pid_file.write_text(str(os.getpid()))
         
         try:
-            # Event loop'u temizle ve yeniden başlat
-            try:
-                loop = asyncio.get_event_loop()
-                loop.close()
-            except:
-                pass
-            
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            
-            # Botu başlat
-            loop.run_until_complete(main())
+            asyncio.run(main())
         finally:
             if pid_file.exists():
                 pid_file.unlink()
