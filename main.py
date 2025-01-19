@@ -978,21 +978,28 @@ async def handle_admin_actions(update: Update, context: ContextTypes.DEFAULT_TYP
                 
                 # Mevcut kullanıcıyı ekle
                 all_targets.add(update.effective_chat.id)
+                logger.info(f"Admin ID eklendi: {update.effective_chat.id}")
                 
                 # Dosya sisteminden kullanıcıları al
                 for directory in [USER_DATA_DIR, CHAT_HISTORY_DIR, USER_CREDITS_DIR]:
                     if directory.exists():
+                        logger.info(f"{directory} klasöründen kullanıcılar alınıyor...")
                         for file in directory.glob("*.json"):
                             try:
-                                all_targets.add(int(file.stem))
+                                user_id = int(file.stem)
+                                all_targets.add(user_id)
+                                logger.info(f"Kullanıcı eklendi: {user_id}")
                             except ValueError:
                                 continue
                 
                 # Premium kullanıcıları ekle
                 if hasattr(user_manager, 'premium_users'):
+                    logger.info("Premium kullanıcılar ekleniyor...")
                     for user_id in user_manager.premium_users:
                         try:
-                            all_targets.add(int(user_id))
+                            user_id = int(user_id)
+                            all_targets.add(user_id)
+                            logger.info(f"Premium kullanıcı eklendi: {user_id}")
                         except (ValueError, TypeError):
                             continue
                 
@@ -1000,14 +1007,21 @@ async def handle_admin_actions(update: Update, context: ContextTypes.DEFAULT_TYP
                 try:
                     channel = await context.bot.get_chat(CHANNEL_USERNAME)
                     all_targets.add(channel.id)
+                    logger.info(f"Kanal eklendi: {channel.id}")
                 except Exception as e:
                     logger.error(f"Kanal bilgisi alınamadı: {e}")
                 
                 # Botun üye olduğu grupları al
                 try:
-                    async for member in context.bot.get_chat_member(CHANNEL_USERNAME, context.bot.id):
-                        if member.chat.type in ['group', 'supergroup']:
-                            all_targets.add(member.chat.id)
+                    # Önce kanalın üyelerini al
+                    admins = await context.bot.get_chat_administrators(CHANNEL_USERNAME)
+                    for admin in admins:
+                        if admin.user.id == context.bot.id:  # Bot'un kendisi
+                            # Bot'un üye olduğu diğer grupları kontrol et
+                            async for chat in context.bot.get_updates():
+                                if chat.message and chat.message.chat.type in ['group', 'supergroup']:
+                                    all_targets.add(chat.message.chat.id)
+                                    logger.info(f"Grup eklendi: {chat.message.chat.id}")
                 except Exception as e:
                     logger.error(f"Grup listesi alınamadı: {e}")
                 
