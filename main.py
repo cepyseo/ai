@@ -137,21 +137,24 @@ async def webhook():
     try:
         if request.method == 'POST':
             json_data = await request.get_json()
-            app_instance = await init_application()  # Her request için yeni instance
+            logger.info(f"Gelen webhook verisi: {json_data}")  # Debug için log ekle
+            
+            app_instance = await init_application()
             update = Update.de_json(json_data, app_instance.bot)
             
             try:
                 await app_instance.process_update(update)
+                logger.info(f"Update başarıyla işlendi: {update.update_id}")
             except Exception as e:
-                logger.error(f"Update işleme hatası: {e}")
+                logger.error(f"Update işleme hatası: {e}", exc_info=True)
             finally:
-                await asyncio.sleep(0.1)  # İşlem sonrası küçük gecikme
-                await app_instance.shutdown()  # Instance'ı temizle
+                await asyncio.sleep(0.1)
+                await app_instance.shutdown()
             
             return 'OK'
         return 'OK'
     except Exception as e:
-        logger.error(f"Webhook hatası: {e}")
+        logger.error(f"Webhook hatası: {e}", exc_info=True)
         return 'Error', 500
 
 async def handle_update(update: Update):
@@ -1184,19 +1187,33 @@ async def cancel_admin_action(update: Update, context: ContextTypes.DEFAULT_TYPE
 # Webhook ve keep-alive için yeni ayarlar
 async def setup_webhook(application):
     """Webhook'u ayarla"""
-    WEBHOOK_URL = f"https://{os.environ.get('RENDER_EXTERNAL_HOSTNAME')}/{TOKEN}"
-    
-    # Önce mevcut webhook'u temizle
-    await application.bot.delete_webhook()
-    
-    # Yeni webhook'u ayarla
-    await application.bot.set_webhook(
-        url=WEBHOOK_URL,
-        allowed_updates=Update.ALL_TYPES,
-        drop_pending_updates=True,
-        max_connections=100
-    )
-    logger.info(f"Webhook ayarlandı: {WEBHOOK_URL}")
+    try:
+        WEBHOOK_URL = f"https://{os.environ.get('RENDER_EXTERNAL_HOSTNAME')}/{TOKEN}"
+        
+        # Önce mevcut webhook'u temizle
+        await application.bot.delete_webhook(drop_pending_updates=True)
+        logger.info("Eski webhook temizlendi")
+        
+        # Yeni webhook'u ayarla
+        await application.bot.set_webhook(
+            url=WEBHOOK_URL,
+            allowed_updates=['message', 'callback_query', 'channel_post'],
+            drop_pending_updates=True,
+            max_connections=100
+        )
+        
+        # Webhook bilgisini kontrol et
+        webhook_info = await application.bot.get_webhook_info()
+        logger.info(f"Webhook durumu: {webhook_info.to_dict()}")
+        
+        if webhook_info.url == WEBHOOK_URL:
+            logger.info(f"Webhook başarıyla ayarlandı: {WEBHOOK_URL}")
+        else:
+            logger.error(f"Webhook ayarlanamadı! Beklenen: {WEBHOOK_URL}, Mevcut: {webhook_info.url}")
+            
+    except Exception as e:
+        logger.error(f"Webhook ayarlama hatası: {e}", exc_info=True)
+        raise
 
 # Ağ ayarları ve timeout sabitleri
 CONNECT_TIMEOUT = 30.0  # Bağlantı timeout süresi
@@ -1258,21 +1275,28 @@ async def main():
         # Bot'u başlat
         application = await init_application()
         await application.initialize()
+        logger.info("Bot başlatıldı")
         
         # Webhook'u ayarla
         await setup_webhook(application)
         
         # Bot'u başlat
         await application.start()
+        logger.info("Application başlatıldı")
         
         # Web uygulamasını başlat
         app, config = create_app()
+        logger.info(f"Web uygulaması {PORT} portunda başlatılıyor...")
         await serve(app, config)
         
     except Exception as e:
         logger.error(f"Kritik hata: {e}", exc_info=True)
         raise
-        
+
+# Quart app ayarlarını güncelle
+app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024  # 10MB
+app.config['PROPAGATE_EXCEPTIONS'] = True
+
 if __name__ == '__main__':
     retry_count = 0
     max_retries = 5

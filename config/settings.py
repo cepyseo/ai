@@ -34,4 +34,37 @@ MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
 THUMB_SIZE = (320, 320)
 
 # Webhook ayarları
-WEBHOOK_URL = f"https://{os.environ.get('RENDER_EXTERNAL_HOSTNAME')}/{TOKEN}" 
+WEBHOOK_HOST = os.environ.get('RENDER_EXTERNAL_HOSTNAME')
+if not WEBHOOK_HOST:
+    raise ValueError("RENDER_EXTERNAL_HOSTNAME environment variable is not set!")
+
+WEBHOOK_URL = f"https://{WEBHOOK_HOST}/{TOKEN}"
+WEBHOOK_MAX_CONNECTIONS = 100
+
+# Debug modu
+DEBUG = os.environ.get('DEBUG', 'False').lower() == 'true'
+
+# Logging ayarları
+LOGGING_CONFIG = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'standard': {
+            'format': '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        },
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'standard',
+            'level': 'INFO',
+        },
+    },
+    'loggers': {
+        '': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': True
+        },
+    }
+} 
