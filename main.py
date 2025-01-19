@@ -17,6 +17,7 @@ from pathlib import Path
 import psutil
 import signal
 from admin_utils import UserManager, UserCredits
+import sys
 
 # Zaman dilimi ayarı
 os.environ['TZ'] = 'UTC'  # UTC zaman dilimini ayarla
@@ -937,19 +938,31 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def main() -> None:
     application = None
     try:
-        # Webhook'u temizle
-        requests.get(f'https://api.telegram.org/bot{TOKEN}/deleteWebhook')
+        # Webhook'u temizle ve bekleyen güncellemeleri sil
+        requests.post(
+            f'https://api.telegram.org/bot{TOKEN}/deleteWebhook',
+            params={'drop_pending_updates': True}
+        )
+        
+        # Mevcut getUpdates isteklerini temizle
+        requests.post(
+            f'https://api.telegram.org/bot{TOKEN}/getUpdates',
+            params={'offset': -1}
+        )
+        
+        # 5 saniye bekle
+        await asyncio.sleep(5)
         
         # Basit yapılandırma
         application = (
             ApplicationBuilder()
             .token(TOKEN)
             .concurrent_updates(False)
-            .connection_pool_size(8)
-            .pool_timeout(30)
-            .connect_timeout(30)
-            .read_timeout(30)
-            .write_timeout(30)
+            .connection_pool_size(4)  # Daha düşük pool size
+            .pool_timeout(20)
+            .connect_timeout(20)
+            .read_timeout(20)
+            .write_timeout(20)
             .build()
         )
 
@@ -981,7 +994,12 @@ async def main() -> None:
         await application.start()
         await application.updater.start_polling(
             drop_pending_updates=True,
-            allowed_updates=Update.ALL_TYPES
+            allowed_updates=Update.ALL_TYPES,
+            bootstrap_retries=0,  # Yeniden deneme yapma
+            read_timeout=20,
+            write_timeout=20,
+            connect_timeout=20,
+            pool_timeout=20
         )
         
         # Sonsuz döngüde bekle
@@ -995,36 +1013,49 @@ async def main() -> None:
             await application.stop()
 
 if __name__ == '__main__':
-    # Önceki process'leri temizle
-    try:
-        import psutil
-        current_pid = os.getpid()
-        for proc in psutil.process_iter(['pid', 'name']):
-            if proc.info['name'] == 'python' and proc.info['pid'] != current_pid:
-                try:
-                    os.kill(proc.info['pid'], 9)
-                    logger.info(f"Eski process sonlandırıldı: {proc.info['pid']}")
-                except:
-                    pass
-        time.sleep(2)  # Process'lerin kapanmasını bekle
-    except:
-        pass
-
-    # Event loop'u temizle
-    try:
-        loop = asyncio.get_event_loop()
-        loop.close()
-    except:
-        pass
-
-    # Yeni event loop oluştur
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
+    # Kilitleme dosyası kontrolü
+    lock_file = Path("bot.lock")
     
-    # Botu başlat
     try:
-        loop.run_until_complete(main())
-    except KeyboardInterrupt:
-        logger.info("Bot kullanıcı tarafından durduruldu!")
-    finally:
-        loop.close()
+        if lock_file.exists():
+            # Kilitleme dosyası varsa, PID'yi kontrol et
+            with open(lock_file) as f:
+                old_pid = int(f.read().strip())
+            try:
+                # Eski process hala çalışıyor mu kontrol et
+                os.kill(old_pid, 0)
+                logger.error(f"Bot zaten çalışıyor (PID: {old_pid})")
+                sys.exit(1)
+            except OSError:
+                # Process artık yok, kilitleme dosyasını sil
+                lock_file.unlink()
+        
+        # Yeni kilitleme dosyası oluştur
+        with open(lock_file, 'w') as f:
+            f.write(str(os.getpid()))
+        
+        # Event loop'u temizle
+        try:
+            loop = asyncio.get_event_loop()
+            loop.close()
+        except:
+            pass
+
+        # Yeni event loop oluştur
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        
+        # Botu başlat
+        try:
+            loop.run_until_complete(main())
+        except KeyboardInterrupt:
+            logger.info("Bot kullanıcı tarafından durduruldu!")
+        finally:
+            loop.close()
+            # Kilitleme dosyasını sil
+            lock_file.unlink()
+            
+    except Exception as e:
+        logger.error(f"Kritik hata: {e}")
+        if lock_file.exists():
+            lock_file.unlink()
