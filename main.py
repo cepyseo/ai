@@ -64,8 +64,9 @@ MAX_HISTORY_LENGTH = 10  # Maksimum kaç mesajı hatırlasın
 # Global değişkenler
 user_manager = UserManager()
 
-# Flask yerine Quart kullan
-app = Quart(__name__)
+# Global application ve app değişkenleri
+application = None
+app = Quart(__name__)  # Quart app'i burada oluştur
 
 # Dizin sabitleri
 USER_DATA_DIR = Path("user_data")
@@ -80,9 +81,6 @@ USER_CREDITS_DIR.mkdir(exist_ok=True)  # Eklendi
 # Global servisleri oluştur
 user_service = UserService()
 chat_service = ChatService()
-
-# Global application değişkeni ekle
-application = None
 
 def setup_project():
     """Proje yapısını oluştur"""
@@ -142,12 +140,10 @@ async def webhook():
             json_data = await request.get_json()
             logger.info(f"Gelen webhook verisi: {json_data}")
             
-            # Tek bir application instance kullan
-            application = context.bot._application
+            # Global application'ı kullan
             update = Update.de_json(json_data, application.bot)
             
             try:
-                # Update'i doğrudan işle
                 await application.process_update(update)
                 logger.info(f"Update başarıyla işlendi: {update.update_id}")
             except Exception as e:
@@ -1288,8 +1284,13 @@ async def main():
         logger.info("Application başlatıldı")
         
         # Web uygulamasını başlat
-        app.bot_application = application  # Quart app'e application'ı ekle
-        app, config = create_app()
+        app.bot_application = application  # Global app'e application'ı ekle
+        
+        # Hypercorn config
+        config = Config()
+        config.bind = [f"0.0.0.0:{PORT}"]
+        config.use_reloader = False
+        
         logger.info(f"Web uygulaması {PORT} portunda başlatılıyor...")
         await serve(app, config)
         
