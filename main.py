@@ -1119,21 +1119,58 @@ async def cancel_admin_action(update: Update, context: ContextTypes.DEFAULT_TYPE
     else:
         await update.message.reply_text("ℹ️ İptal edilecek bir işlem yok.")
 
+# Webhook ve keep-alive için yeni ayarlar
+async def setup_webhook():
+    """Webhook'u ayarla"""
+    WEBHOOK_URL = f"https://{os.environ.get('RENDER_EXTERNAL_HOSTNAME')}/{TOKEN}"
+    
+    # Önce mevcut webhook'u temizle
+    await application.bot.delete_webhook()
+    
+    # Yeni webhook'u ayarla
+    await application.bot.set_webhook(
+        url=WEBHOOK_URL,
+        allowed_updates=Update.ALL_TYPES,
+        drop_pending_updates=True,
+        max_connections=100
+    )
+    logger.info(f"Webhook ayarlandı: {WEBHOOK_URL}")
+
 async def keep_alive():
     """Sunucuyu canlı tut"""
     while True:
         try:
-            # Her 5 dakikada bir ping at
-            await asyncio.sleep(300)
+            # Her 30 saniyede bir ping at
+            await asyncio.sleep(30)
+            
+            # Webhook durumunu kontrol et
+            webhook_info = await application.bot.get_webhook_info()
+            
+            if not webhook_info.url:
+                logger.warning("Webhook düşmüş, yeniden ayarlanıyor...")
+                await setup_webhook()
+            
             # Kendi URL'mize ping at
             url = f"https://{os.environ.get('RENDER_EXTERNAL_HOSTNAME')}/ping"
             async with httpx.AsyncClient() as client:
-                await client.get(url)
-            logger.info("Ping başarılı")
+                response = await client.get(url, timeout=10.0)
+                if response.status_code == 200:
+                    logger.info("Keep-alive ping başarılı")
+                else:
+                    logger.warning(f"Keep-alive ping başarısız: {response.status_code}")
+                    
         except Exception as e:
-            logger.error(f"Ping hatası: {e}")
+            logger.error(f"Keep-alive hatası: {e}")
+            # Hata durumunda webhook'u yeniden ayarla
+            try:
+                await setup_webhook()
+            except Exception as we:
+                logger.error(f"Webhook yeniden ayarlama hatası: {we}")
+        
+        # Hata durumunda bile devam et
+        await asyncio.sleep(1)
 
-# Ana Fonksiyon
+# Ana fonksiyonu güncelle
 async def main() -> None:
     global application
     
@@ -1170,25 +1207,21 @@ async def main() -> None:
 
         logger.info("Bot başlatılıyor...")
         
-        # Webhook URL'sini al
-        WEBHOOK_URL = f"https://{os.environ.get('RENDER_EXTERNAL_HOSTNAME')}/{TOKEN}"
-        
         # Webhook'u ayarla
         await application.initialize()
         await application.start()
-        await application.bot.set_webhook(
-            url=WEBHOOK_URL,
-            allowed_updates=Update.ALL_TYPES,
-            drop_pending_updates=True
-        )
+        await setup_webhook()
         
         # Keep alive task'ı başlat
-        asyncio.create_task(keep_alive())
+        keep_alive_task = asyncio.create_task(keep_alive())
         
         # Hypercorn config
         config = Config()
         config.bind = ["0.0.0.0:10000"]
-        config.keep_alive_timeout = 120  # Keep-alive timeout'u artır
+        config.keep_alive_timeout = 300  # 5 dakika
+        config.graceful_timeout = 300
+        config.worker_class = "asyncio"
+        config.workers = 1
         
         # Sunucuyu başlat
         await serve(app, config)
@@ -1196,33 +1229,20 @@ async def main() -> None:
     except Exception as e:
         logger.error(f"Hata: {e}", exc_info=True)
     finally:
+        if 'keep_alive_task' in locals():
+            keep_alive_task.cancel()
         if application:
             await application.stop()
             await application.bot.delete_webhook()
 
 if __name__ == '__main__':
-    # Tek instance kontrolü
-    pid_file = Path("bot.pid")
-    
-    try:
-        if pid_file.exists():
-            try:
-                old_pid = int(pid_file.read_text().strip())
-                os.kill(old_pid, 0)
-                logger.error(f"Bot zaten çalışıyor (PID: {old_pid})")
-                sys.exit(1)
-            except (ProcessLookupError, ValueError):
-                pid_file.unlink()
-        
-        # Yeni PID dosyası oluştur
-        pid_file.write_text(str(os.getpid()))
-        
+    # Hata yakalama ve yeniden başlatma mekanizması
+    while True:
         try:
             asyncio.run(main())
-        finally:
-            if pid_file.exists():
-                pid_file.unlink()
-    except Exception as e:
-        logger.error(f"Kritik hata: {e}")
-        if pid_file.exists():
-            pid_file.unlink()
+        except Exception as e:
+            logger.error(f"Kritik hata, yeniden başlatılıyor: {e}")
+            time.sleep(5)  # 5 saniye bekle
+        except KeyboardInterrupt:
+            logger.info("Bot kapatılıyor...")
+            break

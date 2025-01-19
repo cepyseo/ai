@@ -5,4 +5,5 @@ Pillow
 requests
 quart>=0.18.0
 hypercorn>=0.14.0
-httpx>=0.24.0 
+httpx>=0.24.0
+hypercorn[uvloop]>=0.14.0 
