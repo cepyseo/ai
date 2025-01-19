@@ -1425,9 +1425,9 @@ async def init_application() -> Application:
         )
 
         # Komut handler'ları
-        application.add_handler(CommandHandler(["start", "başlat"], start))
-        application.add_handler(CommandHandler(["help", "yardım", "h"], help_command))
-        application.add_handler(CommandHandler(["admin", "yönetici"], admin_panel))
+        application.add_handler(CommandHandler(["start", "baslat"], start))
+        application.add_handler(CommandHandler(["help", "yardim", "h"], help_command))
+        application.add_handler(CommandHandler(["admin", "yonetici"], admin_panel))
         application.add_handler(CommandHandler(["ai_chat", "chat"], ai_chat))
         application.add_handler(CommandHandler(["ai_clear", "clear_chat"], ai_clear))
         application.add_handler(CommandHandler(["ai_history", "chat_history"], ai_history))
