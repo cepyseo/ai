@@ -973,15 +973,24 @@ async def handle_admin_actions(update: Update, context: ContextTypes.DEFAULT_TYP
             status_msg = await update.message.reply_text("📢 Duyuru hazırlanıyor...")
             
             try:
-                # Tüm kullanıcıları al
-                all_users = set()
+                # Tüm kullanıcıları ve grupları topla
+                all_targets = set()
                 
-                # Tüm klasörlerden kullanıcıları topla
+                # Bot'un updates'lerini al
+                updates = await context.bot.get_updates(offset=-1, timeout=1)
+                for update in updates:
+                    if update.message:
+                        if update.message.chat.type == 'private':
+                            all_targets.add(update.message.chat.id)
+                        elif update.message.chat.type in ['group', 'supergroup']:
+                            all_targets.add(update.message.chat.id)
+                
+                # Dosya sisteminden kullanıcıları al
                 for directory in [USER_DATA_DIR, CHAT_HISTORY_DIR, USER_CREDITS_DIR]:
                     if directory.exists():
                         for file in directory.glob("*.json"):
                             try:
-                                all_users.add(int(file.stem))
+                                all_targets.add(int(file.stem))
                             except ValueError:
                                 continue
                 
@@ -989,44 +998,55 @@ async def handle_admin_actions(update: Update, context: ContextTypes.DEFAULT_TYP
                 if hasattr(user_manager, 'premium_users'):
                     for user_id in user_manager.premium_users:
                         try:
-                            all_users.add(int(user_id))
+                            all_targets.add(int(user_id))
                         except (ValueError, TypeError):
                             continue
                 
-                total_users = len(all_users)
-                if total_users == 0:
-                    await status_msg.edit_text("❌ Duyuru gönderilebilecek kullanıcı bulunamadı!")
+                # Bot'un üye olduğu kanalları ve grupları al
+                try:
+                    async for dialog in context.bot.get_chat_administrators(CHANNEL_USERNAME):
+                        if dialog.chat.type in ['channel', 'group', 'supergroup']:
+                            all_targets.add(dialog.chat.id)
+                except Exception as e:
+                    logger.error(f"Kanal/grup listesi alınamadı: {e}")
+                
+                logger.info(f"Hedef listesi: {all_targets}")
+                total_targets = len(all_targets)
+                
+                if total_targets == 0:
+                    await status_msg.edit_text("❌ Duyuru gönderilebilecek hedef bulunamadı!")
                     del context.user_data['admin_state']
                     return
                 
-                await status_msg.edit_text(f"📢 Duyuru gönderiliyor... (0/{total_users})")
+                await status_msg.edit_text(f"📢 Duyuru gönderiliyor... (0/{total_targets})")
                 
                 success = 0
                 failed = 0
                 
-                for user_id in all_users:
+                for target_id in all_targets:
                     try:
                         await context.bot.send_message(
-                            chat_id=user_id,
+                            chat_id=target_id,
                             text=f"📢 *DUYURU*\n\n{broadcast_msg}",
                             parse_mode='Markdown'
                         )
                         success += 1
-                        if success % 5 == 0 or success == total_users:
-                            await status_msg.edit_text(
-                                f"📤 Duyuru gönderiliyor... ({success}/{total_users})"
-                            )
+                        logger.info(f"Duyuru başarıyla gönderildi: {target_id}")
                     except Exception as e:
-                        logger.error(f"Duyuru gönderme hatası (User: {user_id}): {e}")
+                        logger.error(f"Duyuru gönderme hatası (Target: {target_id}): {e}")
                         failed += 1
                     finally:
                         await asyncio.sleep(0.05)
+                        if success % 5 == 0 or success + failed == total_targets:
+                            await status_msg.edit_text(
+                                f"📤 Duyuru gönderiliyor... ({success}/{total_targets})"
+                            )
                 
                 await status_msg.edit_text(
                     f"📊 *Duyuru Tamamlandı*\n\n"
                     f"✅ Başarılı: {success}\n"
                     f"❌ Başarısız: {failed}\n"
-                    f"👥 Toplam: {total_users}",
+                    f"👥 Toplam: {total_targets}",
                     parse_mode='Markdown'
                 )
                 
