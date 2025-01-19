@@ -117,6 +117,7 @@ async def handle_admin_actions(update: Update, context: ContextTypes.DEFAULT_TYP
                             parse_mode='Markdown'
                         )
                         success += 1
+                        logger.info(f"Duyuru başarıyla gönderildi: {user_id}")
                     except Exception as e:
                         logger.error(f"Duyuru gönderme hatası (User: {user_id}): {e}")
                         failed += 1

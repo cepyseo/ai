@@ -46,12 +46,46 @@ class UserService:
             logger.error(f"İstatistik güncelleme hatası: {e}")
             return False
             
-    async def get_total_users(self) -> int:
-        """Toplam kullanıcı sayısını getir"""
+    async def get_all_users(self) -> list:
+        """Tüm kullanıcı ID'lerini getir"""
         try:
-            return len(list(self.user_data_dir.glob("*.json")))
+            users = set()
+            
+            # User data klasöründen kullanıcıları al
+            for file in self.user_data_dir.glob("*.json"):
+                try:
+                    user_id = int(file.stem)
+                    users.add(user_id)
+                except ValueError:
+                    continue
+                    
+            # Credits klasöründen kullanıcıları al
+            for file in self.credits_dir.glob("*.json"):
+                try:
+                    user_id = int(file.stem)
+                    users.add(user_id)
+                except ValueError:
+                    continue
+                    
+            return list(users)
+            
         except Exception as e:
-            logger.error(f"Toplam kullanıcı sayısı alınamadı: {e}")
+            logger.error(f"Kullanıcı listesi alma hatası: {e}")
+            return []
+            
+    async def get_premium_users(self) -> int:
+        """Premium kullanıcı sayısını getir"""
+        try:
+            premium_count = 0
+            for user_id in await self.get_all_users():
+                stats = await self.get_user_stats(user_id)
+                if stats.get('premium_until'):
+                    premium_until = datetime.fromisoformat(stats['premium_until'])
+                    if premium_until > datetime.now():
+                        premium_count += 1
+            return premium_count
+        except Exception as e:
+            logger.error(f"Premium kullanıcı sayısı alma hatası: {e}")
             return 0
             
     async def get_active_users_today(self) -> int:
@@ -60,14 +94,17 @@ class UserService:
             today = datetime.now().date()
             active_users = 0
             
-            for file in self.user_data_dir.glob("*.json"):
-                with open(file, 'r', encoding='utf-8') as f:
-                    data = json.load(f)
-                    last_active = datetime.fromisoformat(data.get('last_active', '')).date()
-                    if last_active == today:
-                        active_users += 1
-                        
+            for user_id in await self.get_all_users():
+                stats = await self.get_user_stats(user_id)
+                last_active = datetime.fromisoformat(stats.get('last_active', '')).date()
+                if last_active == today:
+                    active_users += 1
+                    
             return active_users
         except Exception as e:
-            logger.error(f"Aktif kullanıcı sayısı alınamadı: {e}")
-            return 0 
+            logger.error(f"Aktif kullanıcı sayısı alma hatası: {e}")
+            return 0
+            
+    async def get_total_users(self) -> int:
+        """Toplam kullanıcı sayısını getir"""
+        return len(await self.get_all_users()) 
