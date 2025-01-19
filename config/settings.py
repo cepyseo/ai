@@ -34,12 +34,19 @@ ALLOWED_EXTENSIONS = {'jpg', 'jpeg', 'png', 'gif'}
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
 THUMB_SIZE = (320, 320)
 
-# Webhook ayarları
-RENDER_EXTERNAL_URL = os.environ.get('RENDER_EXTERNAL_URL', '').strip('/')
+# Webhook ve port ayarları
+RENDER_EXTERNAL_URL = os.environ.get('RENDER_EXTERNAL_URL')
 RENDER_PORT = int(os.environ.get('PORT', 10000))
 
-# Webhook URL'ini oluştur
-WEBHOOK_URL = f"https://{RENDER_EXTERNAL_URL}/{TOKEN}" if RENDER_EXTERNAL_URL else None
+# Webhook yapılandırması
+if RENDER_EXTERNAL_URL:
+    # URL'i temizle ve formatla
+    RENDER_EXTERNAL_URL = RENDER_EXTERNAL_URL.replace('https://', '').replace('http://', '').rstrip('/')
+    WEBHOOK_URL = f"https://{RENDER_EXTERNAL_URL}/{TOKEN}"
+    WEBHOOK_SECRET = TOKEN[:20]  # Webhook güvenliği için
+else:
+    WEBHOOK_URL = None
+    WEBHOOK_SECRET = None
 
 # Chat ayarları
 MAX_HISTORY_AGE = 24 * 60 * 60  # 24 saat (saniye cinsinden)

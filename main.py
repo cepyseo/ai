@@ -38,11 +38,11 @@ from config.settings import (
     READ_TIMEOUT,
     WRITE_TIMEOUT,
     POOL_TIMEOUT,
-    WEBHOOK_URL,
-    WEBHOOK_PORT,
     CHANNEL_USERNAME,
     RENDER_EXTERNAL_URL,
-    RENDER_PORT
+    RENDER_PORT,
+    WEBHOOK_SECRET,
+    WEBHOOK_URL
 )
 from web.app import create_app
 from handlers.stats import show_stats
@@ -68,6 +68,7 @@ from handlers.command_handlers import (
 from handlers.file_handlers import process_file
 from handlers.error_handler import error_handler
 from services.setup_service import setup_project
+from datetime import datetime
 
 # Zaman dilimi ayarı
 os.environ['TZ'] = 'UTC'  # UTC zaman dilimini ayarla
@@ -162,7 +163,7 @@ def setup_project():
 
 @app.route('/')
 async def home():
-    return "Bot çalışıyor!"
+    return {"status": "running", "timestamp": datetime.now().isoformat()}
 
 @app.route('/ping')
 async def ping():
@@ -172,10 +173,19 @@ async def ping():
 async def webhook():
     """Webhook handler"""
     try:
+        # Webhook token kontrolü
+        if WEBHOOK_SECRET:
+            token = request.headers.get('X-Telegram-Bot-Api-Secret-Token')
+            if token != WEBHOOK_SECRET:
+                logger.warning("Geçersiz webhook token")
+                return 'Unauthorized', 401
+
+        # Update'i işle
         json_data = await request.get_json()
         update = Update.de_json(json_data, app.bot_application.bot)
         await app.bot_application.process_update(update)
         return 'OK'
+        
     except Exception as e:
         logger.error(f"Webhook hatası: {e}", exc_info=True)
         return 'Error', 500
@@ -1349,25 +1359,32 @@ async def setup_webhook(application: Application) -> bool:
     """Webhook'u yapılandırır"""
     try:
         if not RENDER_EXTERNAL_URL:
+            logger.warning("RENDER_EXTERNAL_URL bulunamadı")
             return False
             
-        # Webhook URL'ini doğru formatta oluştur
-        webhook_url = f"https://{RENDER_EXTERNAL_URL.rstrip('/')}/{TOKEN}"
+        # Webhook URL'ini oluştur
+        webhook_url = WEBHOOK_URL  # settings.py'den al
+        logger.info(f"Webhook URL: {webhook_url}")
         
-        # SSL sertifikası kontrolünü devre dışı bırak (development için)
+        # Önce mevcut webhook'u temizle
         await application.bot.delete_webhook(drop_pending_updates=True)
         
         # Yeni webhook'u ayarla
-        await application.bot.set_webhook(
+        success = await application.bot.set_webhook(
             url=webhook_url,
             allowed_updates=Update.ALL_TYPES,
             drop_pending_updates=True,
-            secret_token=TOKEN[:20]  # Webhook güvenliği için
+            max_connections=40,
+            secret_token=WEBHOOK_SECRET
         )
         
-        logger.info(f"Webhook başarıyla ayarlandı: {webhook_url}")
-        return True
-        
+        if success:
+            logger.info("Webhook başarıyla ayarlandı")
+            return True
+        else:
+            logger.error("Webhook ayarlanamadı")
+            return False
+            
     except Exception as e:
         logger.error(f"Webhook hatası: {e}", exc_info=True)
         return False

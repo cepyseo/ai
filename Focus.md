@@ -20,11 +20,11 @@ Key Requirements:
 
 # 📁 Project Structure
 ├─ 📄 admin_utils.py (140 lines) - Python script containing project logic
-├─ 📄 main.py (1478 lines) - Python script containing project logic
+├─ 📄 main.py (1489 lines) - Python script containing project logic
 ├─ 📄 setup_project.py (21 lines) - Python script containing project logic
 ├─ 📁 config
 │  ├─ 📄 logging_config.py (9 lines) - Python script containing project logic
-│  └─ 📄 settings.py (78 lines) - Python script containing project logic
+│  └─ 📄 settings.py (84 lines) - Python script containing project logic
 ├─ 📁 handlers
 │  ├─ 📄 __init__.py (36 lines) - Python script containing project logic
 │  ├─ 📄 admin.py (36 lines) - Python script containing project logic
@@ -198,7 +198,7 @@ Functions:
 Functions:
 - setup_logging
 
-`main.py` (1478 lines)
+`main.py` (1489 lines)
 Functions:
 - ChatHistory
 - _load_history
@@ -282,9 +282,9 @@ Functions:
 - update_stats
 
 # 📊 Project Overview
-**Files:** 31  |  **Lines:** 3,060
+**Files:** 31  |  **Lines:** 3,077
 
 ## 📁 File Distribution
-- .py: 31 files (3,060 lines)
+- .py: 31 files (3,077 lines)
 
-*Updated: January 19, 2025 at 05:22 PM*
+*Updated: January 19, 2025 at 05:25 PM*
