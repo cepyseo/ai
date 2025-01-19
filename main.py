@@ -24,6 +24,8 @@ from quart import Quart, request
 from hypercorn.config import Config
 from hypercorn.asyncio import serve
 import httpx
+from config.settings import TOKEN, CONNECT_TIMEOUT, READ_TIMEOUT, WRITE_TIMEOUT, POOL_TIMEOUT
+from web.app import create_app
 
 # Zaman dilimi ayarı
 os.environ['TZ'] = 'UTC'  # UTC zaman dilimini ayarla
@@ -1152,116 +1154,74 @@ POOL_TIMEOUT = 30.0    # Havuz timeout süresi
 # Port ayarları
 PORT = int(os.environ.get("PORT", 10000))  # Render için varsayılan port
 
-async def main() -> None:
-    global application
+async def init_application():
+    """Bot uygulamasını başlat"""
+    application = (
+        ApplicationBuilder()
+        .token(TOKEN)
+        .connect_timeout(CONNECT_TIMEOUT)
+        .read_timeout(READ_TIMEOUT)
+        .write_timeout(WRITE_TIMEOUT)
+        .pool_timeout(POOL_TIMEOUT)
+        .connection_pool_size(100)
+        .concurrent_updates(True)
+        .build()
+    )
     
+    # Handler'ları ekle
+    handlers = [
+        CommandHandler('start', start),
+        CommandHandler('img', get_image),
+        CommandHandler('kanal', channel_info),
+        CommandHandler('rename', rename_file),
+        CommandHandler('thumb', add_thumbnail),
+        CommandHandler('del_thumb', delete_default_thumb),
+        CommandHandler('view_thumb', view_default_thumb),
+        CommandHandler('ai', ai_chat),
+        CommandHandler('ai_clear', ai_clear),
+        CommandHandler('ai_history', ai_history),
+        CommandHandler('admin', admin_panel),
+        CommandHandler('cancel', cancel_admin_action),
+        MessageHandler((filters.PHOTO | filters.Document.ALL) & ~filters.COMMAND, process_file),
+        MessageHandler(filters.TEXT & ~filters.COMMAND, handle_admin_actions),
+        CallbackQueryHandler(button_callback),
+        CommandHandler('stats', show_stats),
+        CallbackQueryHandler(handle_callback_query)
+    ]
+
+    for handler in handlers:
+        application.add_handler(handler)
+
+    return application
+
+async def main():
     try:
-        # Bot yapılandırması
-        application = (
-            ApplicationBuilder()
-            .token(TOKEN)
-            .connect_timeout(60)  # Timeout sürelerini artır
-            .read_timeout(60)
-            .write_timeout(60)
-            .pool_timeout(60)
-            .get_updates_connect_timeout(60)
-            .get_updates_read_timeout(60)
-            .get_updates_write_timeout(60)
-            .get_updates_pool_timeout(60)
-            .connection_pool_size(100)  # Bağlantı havuzu boyutunu artır
-            .concurrent_updates(True)
-            .build()
-        )
-
-        # Handler'ları ekle
-        handlers = [
-            CommandHandler('start', start),
-            CommandHandler('img', get_image),
-            CommandHandler('kanal', channel_info),
-            CommandHandler('rename', rename_file),
-            CommandHandler('thumb', add_thumbnail),
-            CommandHandler('del_thumb', delete_default_thumb),
-            CommandHandler('view_thumb', view_default_thumb),
-            CommandHandler('ai', ai_chat),
-            CommandHandler('ai_clear', ai_clear),
-            CommandHandler('ai_history', ai_history),
-            CommandHandler('admin', admin_panel),
-            CommandHandler('cancel', cancel_admin_action),
-            MessageHandler((filters.PHOTO | filters.Document.ALL) & ~filters.COMMAND, process_file),
-            MessageHandler(filters.TEXT & ~filters.COMMAND, handle_admin_actions),
-            CallbackQueryHandler(button_callback)
-        ]
-
-        for handler in handlers:
-            application.add_handler(handler)
-
-        logger.info("Bot başlatılıyor...")
+        # Proje yapısını oluştur
+        setup_project()
+        logger.info("Proje yapısı oluşturuldu")
         
-        # Webhook'u ayarla
+        # Bot'u başlat
+        application = await init_application()
         await application.initialize()
         await application.start()
         
-        # Webhook URL'sini ayarla
-        WEBHOOK_URL = f"https://{os.environ.get('RENDER_EXTERNAL_HOSTNAME')}/{TOKEN}"
-        await application.bot.set_webhook(
-            url=WEBHOOK_URL,
-            allowed_updates=Update.ALL_TYPES,
-            drop_pending_updates=True,
-            max_connections=100
-        )
-        logger.info(f"Webhook ayarlandı: {WEBHOOK_URL}")
-        
-        # Hypercorn config
-        config = Config()
-        config.bind = [f"0.0.0.0:{PORT}"]  # Port ayarını kullan
-        config.keep_alive_timeout = 300
-        config.graceful_timeout = 300
-        config.worker_class = "asyncio"
-        config.workers = 1
-        config.timeout_keep_alive = 300
-        config.timeout_graceful_shutdown = 300
-        config.backlog = 100
-        config.use_reloader = False
-        
-        # Sunucuyu başlat
+        # Web uygulamasını başlat
+        app, config = create_app()
         await serve(app, config)
-            
+        
     except Exception as e:
-        logger.error(f"Hata: {e}", exc_info=True)
-        await asyncio.sleep(5)
+        logger.error(f"Kritik hata: {e}", exc_info=True)
         raise
-    finally:
-        try:
-            if application:
-                await application.stop()
-                await application.bot.delete_webhook()
-        except Exception as e:
-            logger.error(f"Kapatma hatası: {e}")
-
+        
 if __name__ == '__main__':
     retry_count = 0
     max_retries = 5
     
     while retry_count < max_retries:
         try:
-            # Event loop'u manuel olarak yönet
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            loop.run_until_complete(main())
+            asyncio.run(main())
             break
         except Exception as e:
             retry_count += 1
-            logger.error(f"Kritik hata (Deneme {retry_count}/{max_retries}): {e}")
-            if retry_count < max_retries:
-                time.sleep(5 * retry_count)
-            else:
-                logger.error("Maksimum deneme sayısına ulaşıldı, bot kapatılıyor...")
-                break
-        except KeyboardInterrupt:
-            logger.info("Bot kapatılıyor...")
-            break
-        finally:
-            try:
-                loop.close()
-            except:
-                pass
+            logger.error(f"Yeniden başlatılıyor ({retry_count}/{max_retries})")
+            asyncio.sleep(5 * retry_count)
