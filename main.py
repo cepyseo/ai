@@ -470,6 +470,31 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
     try:
         if query.data.startswith('admin_'):
             await handle_admin_callback(update, context)
+            
+        elif query.data.startswith('rename_'):
+            file_id = query.data.split('_')[1]
+            context.user_data['waiting_rename'] = {
+                'file_id': file_id,
+                'message_id': query.message.message_id
+            }
+            await query.message.edit_text(
+                "✏️ Lütfen dosya için yeni bir ad yazın:\n"
+                "💡 Sadece dosya adını yazın, uzantı otomatik eklenecektir.",
+                parse_mode='Markdown'
+            )
+            
+        elif query.data.startswith('thumb_'):
+            file_id = query.data.split('_')[1]
+            context.user_data['waiting_thumb'] = {
+                'file_id': file_id,
+                'message_id': query.message.message_id
+            }
+            await query.message.edit_text(
+                "🖼️ Lütfen küçük resim olarak kullanılacak bir fotoğraf gönderin:\n"
+                "💡 Gönderdiğiniz fotoğraf otomatik olarak boyutlandırılacaktır.",
+                parse_mode='Markdown'
+            )
+            
         else:
             if query.data == "commands":
                 commands_text = (
@@ -886,35 +911,40 @@ async def delete_default_thumb(update: Update, context: ContextTypes.DEFAULT_TYP
 # Dosya işleme fonksiyonunu güncelle
 @require_credits('file_operations')
 async def process_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Gönderilen dosyayı otomatik işle"""
+    """Gönderilen dosyayı işle"""
     if not update.message.document:
-        # Eğer fotoğraf gönderildiyse varsayılan thumb olarak kaydet
-        if update.message.photo:
-            await save_default_thumb(update, context)
         return
 
     try:
         doc = update.message.document
-        original_name = doc.file_name
+        original_name = doc.file_name or "dosya"
         
-        # Kullanıcıdan yeni dosya adını iste
-        ask_msg = await update.message.reply_text(
-            "📝 Lütfen dosya için yeni bir ad girin:\n"
-            f"Mevcut ad: `{original_name}`\n\n"
-            "💡 Not: Sadece dosya adını yazın, uzantı otomatik eklenecektir.",
-            parse_mode='Markdown'
+        # Kullanıcının varsayılan thumb'ını kontrol et
+        user_id = update.effective_user.id
+        user_data = get_user_data(user_id)
+        
+        keyboard = [
+            [
+                InlineKeyboardButton("✏️ Yeniden Adlandır", callback_data=f"rename_{doc.file_id}"),
+                InlineKeyboardButton("🖼️ Küçük Resim Ekle", callback_data=f"thumb_{doc.file_id}")
+            ]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        # Dosya bilgilerini göster
+        await update.message.reply_text(
+            f"📁 *Dosya Bilgileri*\n\n"
+            f"📝 Ad: `{original_name}`\n"
+            f"📦 Boyut: `{doc.file_size / 1024 / 1024:.1f} MB`\n"
+            f"🖼️ Küçük Resim: {'✅ Var' if user_data.get('default_thumb') else '❌ Yok'}\n\n"
+            "💡 İşlem yapmak için butonları kullanın:",
+            parse_mode='Markdown',
+            reply_markup=reply_markup
         )
-        
-        # Kullanıcının cevabını bekle
-        context.user_data['waiting_rename'] = {
-            'file_id': doc.file_id,
-            'original_name': original_name,
-            'ask_msg': ask_msg
-        }
-        return
 
     except Exception as e:
-        await update.message.reply_text(f"❌ Dosya işlenirken hata oluştu: {str(e)}")
+        logger.error(f"Dosya işleme hatası: {e}")
+        await update.message.reply_text("❌ Dosya işlenirken bir hata oluştu!")
 
 async def handle_rename_response(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Kullanıcının rename yanıtını işle"""
@@ -924,28 +954,24 @@ async def handle_rename_response(update: Update, context: ContextTypes.DEFAULT_T
     try:
         # Bekleyen dosya bilgilerini al
         file_data = context.user_data['waiting_rename']
-        original_name = file_data['original_name']
-        ask_msg = file_data['ask_msg']
+        file_id = file_data['file_id']
+        message_id = file_data.get('message_id')
         
         # Yeni adı al ve temizle
         new_base_name = update.message.text.strip()
-        # Uzantıyı koru
-        original_ext = original_name.rsplit('.', 1)[1] if '.' in original_name else ''
-        new_name = f"{new_base_name}.{original_ext}".lower()
         
-        # İşlem mesajı
-        process_msg = await update.message.reply_text(
-            "🔄 Dosya işleniyor...\n"
-            f"📝 Orijinal ad: `{original_name}`\n"
-            f"✨ Yeni ad: `{new_name}`\n\n"
-            "⏳ Lütfen bekleyin...",
-            parse_mode='Markdown'
-        )
-
-        # Dosyayı indir
-        file = await context.bot.get_file(file_data['file_id'])
+        # Dosyayı al
+        file = await context.bot.get_file(file_id)
         file_content = await file.download_as_bytearray()
-
+        
+        # Orijinal dosya adından uzantıyı al
+        original_file = await context.bot.get_file(file_id)
+        original_name = original_file.file_path.split('/')[-1]
+        original_ext = original_name.rsplit('.', 1)[1] if '.' in original_name else ''
+        
+        # Yeni dosya adını oluştur
+        new_name = f"{new_base_name}.{original_ext}" if original_ext else new_base_name
+        
         # Kullanıcının varsayılan thumb'ını kontrol et
         user_id = update.effective_user.id
         user_data = get_user_data(user_id)
@@ -953,59 +979,45 @@ async def handle_rename_response(update: Update, context: ContextTypes.DEFAULT_T
         
         if user_data.get("default_thumb"):
             thumb_content = bytes.fromhex(user_data["default_thumb"])
-
-        # İşlem mesajını güncelle
-        await process_msg.edit_text(
-            "🔄 Dosya işleniyor...\n"
-            f"📝 Orijinal ad: `{original_name}`\n"
-            f"✨ Yeni ad: `{new_name}`\n"
-            "🖼️ Küçük resim ekleniyor...",
-            parse_mode='Markdown'
-        )
-
-        # Dosyayı gönder
-        if thumb_content:
             thumb_image = Image.open(io.BytesIO(thumb_content))
             thumb_buffer = io.BytesIO()
             thumb_image.save(thumb_buffer, format='JPEG')
             thumb_buffer.seek(0)
-
-            await context.bot.send_document(
-                chat_id=update.effective_chat.id,
-                document=io.BytesIO(file_content),
-                filename=new_name,
-                thumbnail=thumb_buffer,
-                caption=(
-                    "✅ Dosya başarıyla işlendi!\n\n"
-                    f"📝 Orijinal ad: `{original_name}`\n"
-                    f"✨ Yeni ad: `{new_name}`\n"
-                    "🖼️ Küçük resim eklendi"
-                ),
-                parse_mode='Markdown'
-            )
-        else:
-            await context.bot.send_document(
-                chat_id=update.effective_chat.id,
-                document=io.BytesIO(file_content),
-                filename=new_name,
-                caption=(
-                    "✅ Dosya başarıyla işlendi!\n\n"
-                    f"📝 Orijinal ad: `{original_name}`\n"
-                    f"✨ Yeni ad: `{new_name}`"
-                ),
-                parse_mode='Markdown'
-            )
-
-        # Mesajları temizle
-        await ask_msg.delete()
-        await process_msg.delete()
+        
+        # Dosyayı gönder
+        sent_message = await context.bot.send_document(
+            chat_id=update.effective_chat.id,
+            document=io.BytesIO(file_content),
+            filename=new_name,
+            thumbnail=thumb_buffer if thumb_content else None,
+            caption=(
+                "✅ Dosya başarıyla yeniden adlandırıldı!\n\n"
+                f"📝 Yeni ad: `{new_name}`"
+            ),
+            parse_mode='Markdown'
+        )
+        
+        # Eski mesajı güncelle veya sil
+        if message_id:
+            try:
+                await context.bot.edit_message_text(
+                    chat_id=update.effective_chat.id,
+                    message_id=message_id,
+                    text=f"✅ Dosya yeniden adlandırıldı: `{new_name}`",
+                    parse_mode='Markdown'
+                )
+            except:
+                pass
+        
+        # Kullanıcının mesajını sil
         await update.message.delete()
-
+        
         # Kullanıcı verisini temizle
         del context.user_data['waiting_rename']
 
     except Exception as e:
-        await update.message.reply_text(f"❌ Dosya işlenirken hata oluştu: {str(e)}")
+        logger.error(f"Yeniden adlandırma hatası: {e}")
+        await update.message.reply_text("❌ Dosya yeniden adlandırılırken bir hata oluştu!")
 
 # Varsayılan thumb görüntüleme komutu
 async def view_default_thumb(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1439,13 +1451,19 @@ async def init_application() -> Application:
         application.add_handler(CommandHandler(["ai_history", "chat_history"], ai_history))
         application.add_handler(CommandHandler(["image", "resim"], get_image))
         application.add_handler(CommandHandler(["stats", "istatistik"], show_stats))
-        application.add_handler(CommandHandler(["add_thumb", "thumbnail"], add_thumbnail))
+        
+        # Dosya işleme handler'ları
+        application.add_handler(CommandHandler(["rename"], rename_file))
+        application.add_handler(CommandHandler(["add_thumb", "thumbnail"], save_default_thumb))
         application.add_handler(CommandHandler(["del_thumb", "delete_thumb"], delete_default_thumb))
         application.add_handler(CommandHandler(["view_thumb", "show_thumb"], view_default_thumb))
-
+        
+        # Dosya ve fotoğraf handler'ları
+        application.add_handler(MessageHandler(filters.PHOTO, save_default_thumb))
+        application.add_handler(MessageHandler(filters.Document.ALL & ~filters.COMMAND, process_file))
+        
         # Callback ve mesaj handler'ları
         application.add_handler(CallbackQueryHandler(handle_callback_query))
-        application.add_handler(MessageHandler(filters.Document.ALL, process_file))
         application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_chat))
 
         # Hata handler'ı
