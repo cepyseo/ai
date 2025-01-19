@@ -1,12 +1,20 @@
 import os
 import requests
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, Application
-from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, filters, CallbackQueryHandler, MessageHandler
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import (
+    Application,
+    ApplicationBuilder,
+    CommandHandler,
+    ContextTypes,
+    filters,
+    CallbackQueryHandler,
+    MessageHandler
+)
 import urllib3
 import asyncio
 import logging
 from telegram.constants import ChatMemberStatus
-import pytz  # Yeni import
+import pytz
 import telegram
 import time
 from PIL import Image
@@ -1386,29 +1394,29 @@ async def init_application() -> Application:
     )
     
     # Komut handler'ları
-    handlers = [
-        CommandHandler('start', start),
-        CommandHandler('help', help_command),
-        CommandHandler('admin', admin_panel),
-        CommandHandler('ai', ai_chat),
-        CommandHandler('ai_clear', ai_clear),
-        CommandHandler('ai_history', ai_history),
-        CommandHandler('img', get_image),
-        CommandHandler('thumb', add_thumbnail),
-        CommandHandler('del_thumb', delete_default_thumb),
-        CommandHandler('view_thumb', view_default_thumb),
-        CallbackQueryHandler(handle_callback_query),
-        MessageHandler(
-            (filters.PHOTO | filters.Document.ALL) & ~filters.COMMAND,
-            process_file
-        ),
-        MessageHandler(filters.TEXT & ~filters.COMMAND, handle_chat)
-    ]
-
-    for handler in handlers:
-        application.add_handler(handler)
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("help", help_command))
+    application.add_handler(CommandHandler("admin", admin_panel))
+    application.add_handler(CommandHandler("ai", ai_chat))
+    application.add_handler(CommandHandler("ai_clear", ai_clear))
+    application.add_handler(CommandHandler("ai_history", ai_history))
+    application.add_handler(CommandHandler("img", get_image))
+    application.add_handler(CommandHandler("thumb", add_thumbnail))
+    application.add_handler(CommandHandler("del_thumb", delete_default_thumb))
+    application.add_handler(CommandHandler("view_thumb", view_default_thumb))
     
-    # Hata handler'ı
+    # Callback ve mesaj handler'larını ekle
+    application.add_handler(CallbackQueryHandler(handle_callback_query))
+    application.add_handler(MessageHandler(
+        (filters.PHOTO | filters.Document.ALL) & ~filters.COMMAND,
+        process_file
+    ))
+    application.add_handler(MessageHandler(
+        filters.TEXT & ~filters.COMMAND,
+        handle_chat
+    ))
+    
+    # Hata handler'ını ekle
     application.add_error_handler(error_handler)
     
     return application
