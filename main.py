@@ -1003,31 +1003,22 @@ async def handle_admin_actions(update: Update, context: ContextTypes.DEFAULT_TYP
                         except (ValueError, TypeError):
                             continue
                 
-                # Botun üye olduğu grupları al
+                # Kanal ve grup bilgilerini al
                 try:
-                    # Kanal üyelerini al
-                    admins = await context.bot.get_chat_administrators(CHANNEL_USERNAME)
-                    for admin in admins:
-                        if admin.user.id == context.bot.id:  # Bot'un kendisi
-                            # Kanal ID'sini ekle
-                            channel_chat = await context.bot.get_chat(CHANNEL_USERNAME)
-                            if channel_chat.type in ['channel', 'group', 'supergroup']:
-                                all_targets.add(channel_chat.id)
-                                logger.info(f"Kanal/Grup eklendi: {channel_chat.id}")
+                    # Kanal bilgisini al
+                    channel = await context.bot.get_chat(CHANNEL_USERNAME)
+                    all_targets.add(channel.id)
+                    logger.info(f"Kanal eklendi: {channel.id}")
+                    
+                    # Kanalın üyelerini al
+                    members = await context.bot.get_chat_administrators(CHANNEL_USERNAME)
+                    for member in members:
+                        if member.user.id != context.bot.id:  # Bot'un kendisi hariç
+                            all_targets.add(member.user.id)
+                            logger.info(f"Kanal üyesi eklendi: {member.user.id}")
                             
-                            # Bot'un üye olduğu diğer grupları kontrol et
-                            try:
-                                # Bot'un üye olduğu tüm sohbetleri al
-                                async with context.bot:
-                                    async for chat in context.bot.get_chat_administrators(CHANNEL_USERNAME):
-                                        if chat.chat.type in ['group', 'supergroup']:
-                                            all_targets.add(chat.chat.id)
-                                            logger.info(f"Grup eklendi: {chat.chat.id}")
-                            except Exception as e:
-                                logger.error(f"Grup listesi alınamadı: {e}")
-                
                 except Exception as e:
-                    logger.error(f"Kanal/grup listesi alınamadı: {e}")
+                    logger.error(f"Kanal bilgileri alınamadı: {e}")
                 
                 logger.info(f"Hedef listesi: {all_targets}")
                 total_targets = len(all_targets)
@@ -1042,9 +1033,12 @@ async def handle_admin_actions(update: Update, context: ContextTypes.DEFAULT_TYP
                 success = 0
                 failed = 0
                 
+                # Her hedef için duyuru gönder
                 for target_id in all_targets:
                     try:
-                        await context.bot.send_message(
+                        # Her hedef için yeni bir bot instance'ı kullan
+                        bot = context.bot._bot
+                        await bot.send_message(
                             chat_id=target_id,
                             text=f"📢 *DUYURU*\n\n{broadcast_msg}",
                             parse_mode='Markdown'
@@ -1057,25 +1051,34 @@ async def handle_admin_actions(update: Update, context: ContextTypes.DEFAULT_TYP
                     finally:
                         await asyncio.sleep(0.05)
                         if success % 5 == 0 or success + failed == total_targets:
-                            await status_msg.edit_text(
-                                f"📤 Duyuru gönderiliyor... ({success}/{total_targets})"
-                            )
+                            try:
+                                await status_msg.edit_text(
+                                    f"📤 Duyuru gönderiliyor... ({success}/{total_targets})"
+                                )
+                            except Exception as e:
+                                logger.error(f"Durum mesajı güncellenemedi: {e}")
                 
-                await status_msg.edit_text(
-                    f"📊 *Duyuru Tamamlandı*\n\n"
-                    f"✅ Başarılı: {success}\n"
-                    f"❌ Başarısız: {failed}\n"
-                    f"👥 Toplam: {total_targets}",
-                    parse_mode='Markdown'
-                )
+                try:
+                    await status_msg.edit_text(
+                        f"📊 *Duyuru Tamamlandı*\n\n"
+                        f"✅ Başarılı: {success}\n"
+                        f"❌ Başarısız: {failed}\n"
+                        f"👥 Toplam: {total_targets}",
+                        parse_mode='Markdown'
+                    )
+                except Exception as e:
+                    logger.error(f"Son durum mesajı güncellenemedi: {e}")
                 
             except Exception as e:
                 logger.error(f"Duyuru işlemi hatası: {e}")
-                await status_msg.edit_text(
-                    f"❌ *Duyuru Gönderilirken Hata Oluştu*\n\n"
-                    f"Hata: {str(e)}",
-                    parse_mode='Markdown'
-                )
+                try:
+                    await status_msg.edit_text(
+                        f"❌ *Duyuru Gönderilirken Hata Oluştu*\n\n"
+                        f"Hata: {str(e)}",
+                        parse_mode='Markdown'
+                    )
+                except Exception as e:
+                    logger.error(f"Hata mesajı gönderilemedi: {e}")
             finally:
                 if 'admin_state' in context.user_data:
                     del context.user_data['admin_state']
