@@ -137,14 +137,16 @@ async def webhook():
     try:
         if request.method == 'POST':
             json_data = await request.get_json()
-            update = Update.de_json(json_data, application.bot)
+            app_instance = await init_application()  # Her request için yeni instance
+            update = Update.de_json(json_data, app_instance.bot)
             
             try:
-                await application.process_update(update)
+                await app_instance.process_update(update)
             except Exception as e:
                 logger.error(f"Update işleme hatası: {e}")
             finally:
                 await asyncio.sleep(0.1)  # İşlem sonrası küçük gecikme
+                await app_instance.shutdown()  # Instance'ı temizle
             
             return 'OK'
         return 'OK'
@@ -1180,7 +1182,7 @@ async def cancel_admin_action(update: Update, context: ContextTypes.DEFAULT_TYPE
         await update.message.reply_text("ℹ️ İptal edilecek bir işlem yok.")
 
 # Webhook ve keep-alive için yeni ayarlar
-async def setup_webhook():
+async def setup_webhook(application):
     """Webhook'u ayarla"""
     WEBHOOK_URL = f"https://{os.environ.get('RENDER_EXTERNAL_HOSTNAME')}/{TOKEN}"
     
@@ -1258,7 +1260,7 @@ async def main():
         await application.initialize()
         
         # Webhook'u ayarla
-        await setup_webhook()
+        await setup_webhook(application)
         
         # Bot'u başlat
         await application.start()
