@@ -18,6 +18,8 @@ import psutil
 import signal
 from admin_utils import UserManager, UserCredits
 import sys
+from flask import Flask
+from threading import Thread
 
 # Zaman dilimi ayarı
 os.environ['TZ'] = 'UTC'  # UTC zaman dilimini ayarla
@@ -50,6 +52,18 @@ MAX_HISTORY_LENGTH = 10  # Maksimum kaç mesajı hatırlasın
 
 # Global değişkenler
 user_manager = UserManager()
+
+# Flask uygulaması
+app = Flask(__name__)
+
+@app.route('/')
+def home():
+    return "Bot çalışıyor!"
+
+def run_flask():
+    # Render için port ayarı
+    port = int(os.environ.get("PORT", 8080))
+    app.run(host='0.0.0.0', port=port)
 
 # Kredi kontrolü decorator'ı
 def require_credits(feature: str):
@@ -1017,11 +1031,14 @@ async def main() -> None:
             params={'drop_pending_updates': True}
         )
         
-        # Basit yapılandırma
+        # 5 saniye bekle
+        await asyncio.sleep(5)
+        
+        # Bot yapılandırması
         application = (
             ApplicationBuilder()
             .token(TOKEN)
-            .concurrent_updates(False)
+            .concurrent_updates(True)  # Eşzamanlı güncellemeleri etkinleştir
             .build()
         )
 
@@ -1052,7 +1069,15 @@ async def main() -> None:
         # Polling başlat
         await application.initialize()
         await application.start()
-        await application.updater.start_polling(drop_pending_updates=True)
+        await application.updater.start_polling(
+            drop_pending_updates=True,
+            allowed_updates=Update.ALL_TYPES,
+            read_timeout=30,
+            write_timeout=30
+        )
+        
+        # Flask sunucusunu başlat
+        Thread(target=run_flask, daemon=True).start()
         
         # Sonsuz döngüde bekle
         while True:
@@ -1065,43 +1090,39 @@ async def main() -> None:
             await application.stop()
 
 if __name__ == '__main__':
-    # PID dosyası yolu
+    # Tek instance kontrolü
     pid_file = Path("bot.pid")
     
     try:
-        # Eğer PID dosyası varsa
         if pid_file.exists():
             try:
-                # Eski PID'yi oku
                 old_pid = int(pid_file.read_text().strip())
-                
-                # Process hala çalışıyor mu kontrol et
                 os.kill(old_pid, 0)
-                
-                # Process çalışıyorsa çık
                 logger.error(f"Bot zaten çalışıyor (PID: {old_pid})")
                 sys.exit(1)
-                
-            except ProcessLookupError:
-                # Process artık yok, PID dosyasını sil
-                pid_file.unlink()
-            except ValueError:
-                # Geçersiz PID, dosyayı sil
+            except (ProcessLookupError, ValueError):
                 pid_file.unlink()
         
         # Yeni PID dosyası oluştur
         pid_file.write_text(str(os.getpid()))
         
         try:
+            # Event loop'u temizle ve yeniden başlat
+            try:
+                loop = asyncio.get_event_loop()
+                loop.close()
+            except:
+                pass
+            
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            
             # Botu başlat
-            asyncio.run(main())
+            loop.run_until_complete(main())
         finally:
-            # PID dosyasını temizle
             if pid_file.exists():
                 pid_file.unlink()
-                
     except Exception as e:
         logger.error(f"Kritik hata: {e}")
-        # Hata durumunda PID dosyasını temizle
         if pid_file.exists():
             pid_file.unlink()
