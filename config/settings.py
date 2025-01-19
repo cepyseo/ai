@@ -3,16 +3,17 @@ from pathlib import Path
 
 # Bot ayarları
 TOKEN = '7694637533:AAEz00Fc4lnLYqByt_56Bxr5YQqyPAlgosA'
+TELEGRAM_TOKEN = TOKEN  # Eski kodlarla uyumluluk için
 CHANNEL_USERNAME = '@clonicai'
 
 # Port ayarları
 PORT = int(os.environ.get("PORT", 10000))
 
 # Timeout ayarları
-CONNECT_TIMEOUT = 60
-READ_TIMEOUT = 60
-WRITE_TIMEOUT = 60
-POOL_TIMEOUT = 60
+CONNECT_TIMEOUT = 30.0
+READ_TIMEOUT = 30.0
+WRITE_TIMEOUT = 30.0
+POOL_TIMEOUT = 30.0
 
 # Dizin yapılandırması
 BASE_DIR = Path(__file__).parent.parent
@@ -34,20 +35,19 @@ MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
 THUMB_SIZE = (320, 320)
 
 # Webhook ayarları
-WEBHOOK_HOST = os.environ.get('RENDER_EXTERNAL_HOSTNAME')
-if not WEBHOOK_HOST:
-    raise ValueError("RENDER_EXTERNAL_HOSTNAME environment variable is not set!")
+WEBHOOK_URL = os.environ.get('WEBHOOK_URL')
+WEBHOOK_PORT = int(os.environ.get('PORT', 10000))
 
-WEBHOOK_PATH = f'/{TOKEN}'
-WEBHOOK_URL = f"https://{WEBHOOK_HOST}{WEBHOOK_PATH}"
-WEBHOOK_MAX_CONNECTIONS = 100
+# Render ayarları
+RENDER_EXTERNAL_URL = os.environ.get('RENDER_EXTERNAL_URL')
+RENDER_PORT = int(os.environ.get('PORT', 10000))
 
-# Web sunucu ayarları
-WEB_SERVER = {
-    'host': '0.0.0.0',
-    'port': int(os.environ.get("PORT", 10000)),
-    'webhook_path': WEBHOOK_PATH,
-}
+# Chat ayarları
+MAX_HISTORY_AGE = 24 * 60 * 60  # 24 saat (saniye cinsinden)
+MAX_HISTORY_LENGTH = 10  # Maksimum kaç mesaj hatırlansın
+
+# API limitleri
+MAX_CONNECTIONS = 40  # Render Free tier için optimize edildi
 
 # Debug modu
 DEBUG = os.environ.get('DEBUG', 'False').lower() == 'true'

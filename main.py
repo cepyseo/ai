@@ -24,7 +24,18 @@ from quart import Quart, request
 from hypercorn.config import Config
 from hypercorn.asyncio import serve
 import httpx
-from config.settings import TOKEN, CONNECT_TIMEOUT, READ_TIMEOUT, WRITE_TIMEOUT, POOL_TIMEOUT, TELEGRAM_TOKEN, WEBHOOK_URL, WEBHOOK_PORT
+from config.settings import (
+    TOKEN,
+    CONNECT_TIMEOUT,
+    READ_TIMEOUT,
+    WRITE_TIMEOUT,
+    POOL_TIMEOUT,
+    WEBHOOK_URL,
+    WEBHOOK_PORT,
+    CHANNEL_USERNAME,
+    RENDER_EXTERNAL_URL,
+    RENDER_PORT
+)
 from web.app import create_app
 from handlers.stats import show_stats
 from handlers.callback_handlers import handle_callback_query
@@ -44,10 +55,6 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 # Logger ayarları
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-# Telegram bot token ve kanal adı
-TOKEN = '7694637533:AAEz00Fc4lnLYqByt_56Bxr5YQqyPAlgosA'
-CHANNEL_USERNAME = '@clonicai'
 
 # Yeni komutlar için sabitler
 ALLOWED_EXTENSIONS = {'jpg', 'jpeg', 'png', 'gif'}
