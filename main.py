@@ -322,61 +322,119 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=reply_markup
     )
 
-# Callback sorgularını işle
-async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Buton callback'lerini işle"""
+# Admin callback handler'ını güncelle
+async def handle_admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Admin callback'lerini işle"""
     query = update.callback_query
-    await query.answer()  # Kullanıcıya geri bildirim gönder
+    user_id = query.from_user.id
     
-    if not user_manager.is_admin(query.from_user.username):
-        await query.message.edit_text("⛔️ Admin yetkisine sahip değilsiniz!")
+    # Admin kontrolü
+    if not user_manager.is_admin(user_id):
+        await query.answer("⛔️ Bu işlem için yetkiniz yok!", show_alert=True)
         return
-
-    if query.data == "admin_broadcast":
-        context.user_data['admin_state'] = 'waiting_broadcast'
-        await query.message.edit_text(
-            "📢 *Duyuru Gönderme*\n\n"
-            "Lütfen göndermek istediğiniz duyuru mesajını yazın.\n"
-            "İptal etmek için /cancel yazabilirsiniz.",
-            parse_mode='Markdown'
-        )
-    elif query.data == "admin_premium":
-        context.user_data['admin_state'] = 'waiting_premium_user'
-        await query.message.edit_text(
-            "👑 *Premium Üyelik*\n\n"
-            "Premium vermek istediğiniz kullanıcının ID'sini gönderin.\n"
-            "İptal etmek için /cancel yazabilirsiniz.",
-            parse_mode='Markdown'
-        )
-    elif query.data == "admin_ban":
-        context.user_data['admin_state'] = 'waiting_ban_user'
-        await query.message.edit_text(
-            "🚫 *Kullanıcı Yasaklama*\n\n"
-            "Yasaklamak istediğiniz kullanıcının ID'sini gönderin.\n"
-            "İptal etmek için /cancel yazabilirsiniz.",
-            parse_mode='Markdown'
-        )
-    elif query.data == "admin_unban":
-        context.user_data['admin_state'] = 'waiting_unban_user'
-        await query.message.edit_text(
-            "✅ *Yasak Kaldırma*\n\n"
-            "Yasağını kaldırmak istediğiniz kullanıcının ID'sini gönderin.\n"
-            "İptal etmek için /cancel yazabilirsiniz.",
-            parse_mode='Markdown'
-        )
-    elif query.data == "admin_stats":
-        # İstatistikleri hesapla
-        total_users = len(list(USER_DATA_DIR.glob("*.json")))
-        premium_users = len(user_manager.premium_users)
-        banned_users = len(user_manager.banned_users)
         
-        await query.message.edit_text(
-            f"📊 *Bot İstatistikleri*\n\n"
-            f"👥 Toplam Kullanıcı: {total_users}\n"
-            f"👑 Premium Üyeler: {premium_users}\n"
-            f"🚫 Yasaklı Kullanıcılar: {banned_users}",
-            parse_mode='Markdown'
-        )
+    try:
+        if query.data == "admin_broadcast":
+            context.user_data['admin_state'] = 'waiting_broadcast'
+            await query.message.edit_text(
+                "📢 Lütfen yayınlamak istediğiniz mesajı gönderin:\n"
+                "(/cancel ile iptal edebilirsiniz)",
+                reply_markup=None
+            )
+            
+        elif query.data == "admin_premium":
+            context.user_data['admin_state'] = 'waiting_premium_user'
+            await query.message.edit_text(
+                "👑 Premium vermek istediğiniz kullanıcının ID'sini gönderin:\n"
+                "(/cancel ile iptal edebilirsiniz)",
+                reply_markup=None
+            )
+            
+        elif query.data == "admin_ban":
+            context.user_data['admin_state'] = 'waiting_ban_user'
+            await query.message.edit_text(
+                "🚫 Yasaklamak istediğiniz kullanıcının ID'sini gönderin:\n"
+                "(/cancel ile iptal edebilirsiniz)",
+                reply_markup=None
+            )
+            
+        elif query.data == "admin_unban":
+            context.user_data['admin_state'] = 'waiting_unban_user'
+            await query.message.edit_text(
+                "✅ Yasağını kaldırmak istediğiniz kullanıcının ID'sini gönderin:\n"
+                "(/cancel ile iptal edebilirsiniz)",
+                reply_markup=None
+            )
+            
+        elif query.data == "admin_stats":
+            # İstatistikleri getir
+            total_users = await user_service.get_total_users()
+            active_users = await user_service.get_active_users_today()
+            
+            stats_text = (
+                "📊 *Bot İstatistikleri*\n\n"
+                f"👥 Toplam Kullanıcı: `{total_users}`\n"
+                f"📱 Bugün Aktif: `{active_users}`\n"
+                f"💾 Bellek Kullanımı: `{psutil.Process().memory_info().rss / 1024 / 1024:.1f} MB`\n"
+                f"⏱️ Çalışma Süresi: `{datetime.now() - START_TIME}`"
+            )
+            
+            await query.message.edit_text(
+                stats_text,
+                parse_mode='Markdown',
+                reply_markup=InlineKeyboardMarkup([[
+                    InlineKeyboardButton("🔄 Yenile", callback_data="admin_stats"),
+                    InlineKeyboardButton("◀️ Geri", callback_data="admin_back")
+                ]])
+            )
+            
+        elif query.data == "admin_back":
+            # Ana admin menüsüne dön
+            keyboard = [
+                [
+                    InlineKeyboardButton("📢 Duyuru Yap", callback_data="admin_broadcast"),
+                    InlineKeyboardButton("👑 Premium Ver", callback_data="admin_premium")
+                ],
+                [
+                    InlineKeyboardButton("🚫 Kullanıcı Yasakla", callback_data="admin_ban"),
+                    InlineKeyboardButton("✅ Yasak Kaldır", callback_data="admin_unban")
+                ],
+                [
+                    InlineKeyboardButton("📊 İstatistikler", callback_data="admin_stats")
+                ]
+            ]
+            
+            await query.message.edit_text(
+                "🔐 *Admin Paneli*\n\nYapmak istediğiniz işlemi seçin:",
+                parse_mode='Markdown',
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
+            
+    except Exception as e:
+        logger.error(f"Admin callback hatası: {e}")
+        await query.answer("❌ Bir hata oluştu!", show_alert=True)
+
+# Callback handler'ını güncelle
+async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Callback query'leri işle"""
+    query = update.callback_query
+    
+    try:
+        if query.data.startswith('admin_'):
+            await handle_admin_callback(update, context)
+        else:
+            await query.answer()
+            
+            if query.data == "commands":
+                # ... mevcut commands kodu ...
+                pass
+            elif query.data == "help":
+                # ... mevcut help kodu ...
+                pass
+                
+    except Exception as e:
+        logger.error(f"Callback hatası: {e}")
+        await query.answer("❌ Bir hata oluştu!", show_alert=True)
 
 # Görsel Alma Fonksiyonu
 @require_credits('image_search')
