@@ -76,17 +76,23 @@ async def home():
 @app.route(f'/{TOKEN}', methods=['POST'])
 async def webhook():
     """Telegram webhook handler"""
-    if request.method == 'POST':
-        json_data = await request.get_json()
-        update = Update.de_json(json_data, application.bot)
-        
-        try:
-            await application.process_update(update)
-        except Exception as e:
-            logger.error(f"Update işleme hatası: {e}")
-        
+    try:
+        if request.method == 'POST':
+            json_data = await request.get_json()
+            update = Update.de_json(json_data, application.bot)
+            
+            try:
+                await application.process_update(update)
+            except Exception as e:
+                logger.error(f"Update işleme hatası: {e}")
+            finally:
+                await asyncio.sleep(0.1)  # İşlem sonrası küçük gecikme
+            
+            return 'OK'
         return 'OK'
-    return 'OK'
+    except Exception as e:
+        logger.error(f"Webhook hatası: {e}")
+        return 'Error', 500
 
 async def handle_update(update: Update):
     """Update'i işle"""
@@ -987,94 +993,104 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # Message handler'ı ekle - admin işlemleri için
 async def handle_admin_actions(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Admin işlemlerini yöneten handler"""
-    if not update.message or not update.message.text:
-        return
-
-    if 'admin_state' not in context.user_data:
-        return
-    
-    if not user_manager.is_admin(update.effective_user.username):
-        await update.message.reply_text("⛔️ Admin yetkisine sahip değilsiniz!")
-        return
-
-    state = context.user_data['admin_state']
-    
-    if state == 'waiting_broadcast':
-        broadcast_msg = update.message.text
-        if broadcast_msg.lower() == '/cancel':
-            del context.user_data['admin_state']
-            await update.message.reply_text("❌ Duyuru iptal edildi.")
+    try:
+        if not update.message or not update.message.text:
             return
 
-        status_msg = await update.message.reply_text("📢 Duyuru hazırlanıyor...")
+        if 'admin_state' not in context.user_data:
+            return
         
-        try:
-            # Tüm kullanıcıları al
-            all_users = set()
-            
-            # Test kullanıcısı ekle (kendiniz)
-            all_users.add(update.effective_user.id)
-            
-            # Premium kullanıcıları ekle
-            if hasattr(user_manager, 'premium_users'):
-                for user_id in user_manager.premium_users:
-                    try:
-                        all_users.add(int(user_id))
-                    except (ValueError, TypeError):
-                        continue
-            
-            # Normal kullanıcıları ekle
-            if USER_CREDITS_DIR.exists():
-                for file in USER_CREDITS_DIR.glob("*.json"):
-                    try:
-                        all_users.add(int(file.stem))
-                    except ValueError:
-                        continue
-            
-            total_users = len(all_users)
-            if total_users == 0:
-                await status_msg.edit_text("❌ Duyuru gönderilebilecek kullanıcı bulunamadı!")
+        if not user_manager.is_admin(update.effective_user.username):
+            await update.message.reply_text("⛔️ Admin yetkisine sahip değilsiniz!")
+            return
+
+        state = context.user_data['admin_state']
+        
+        if state == 'waiting_broadcast':
+            broadcast_msg = update.message.text
+            if broadcast_msg.lower() == '/cancel':
                 del context.user_data['admin_state']
+                await update.message.reply_text("❌ Duyuru iptal edildi.")
                 return
+
+            status_msg = await update.message.reply_text("📢 Duyuru hazırlanıyor...")
             
-            await status_msg.edit_text(f"📢 Duyuru gönderiliyor... (0/{total_users})")
-            
-            success = 0
-            failed = 0
-            
-            for user_id in all_users:
-                try:
-                    await context.bot.send_message(
-                        chat_id=user_id,
-                        text=f"📢 *DUYURU*\n\n{broadcast_msg}",
-                        parse_mode='Markdown'
-                    )
-                    success += 1
-                    if success % 5 == 0 or success == total_users:
-                        await status_msg.edit_text(
-                            f"📤 Duyuru gönderiliyor... ({success}/{total_users})"
+            try:
+                # Tüm kullanıcıları al
+                all_users = set()
+                
+                # Test kullanıcısı ekle (kendiniz)
+                all_users.add(update.effective_user.id)
+                
+                # Premium kullanıcıları ekle
+                if hasattr(user_manager, 'premium_users'):
+                    for user_id in user_manager.premium_users:
+                        try:
+                            all_users.add(int(user_id))
+                        except (ValueError, TypeError):
+                            continue
+                
+                # Normal kullanıcıları ekle
+                if USER_CREDITS_DIR.exists():
+                    for file in USER_CREDITS_DIR.glob("*.json"):
+                        try:
+                            all_users.add(int(file.stem))
+                        except ValueError:
+                            continue
+                
+                total_users = len(all_users)
+                if total_users == 0:
+                    await status_msg.edit_text("❌ Duyuru gönderilebilecek kullanıcı bulunamadı!")
+                    del context.user_data['admin_state']
+                    return
+                
+                await status_msg.edit_text(f"📢 Duyuru gönderiliyor... (0/{total_users})")
+                
+                success = 0
+                failed = 0
+                
+                for user_id in all_users:
+                    try:
+                        await context.bot.send_message(
+                            chat_id=user_id,
+                            text=f"📢 *DUYURU*\n\n{broadcast_msg}",
+                            parse_mode='Markdown'
                         )
-                except Exception as e:
-                    logger.error(f"Duyuru gönderme hatası (User: {user_id}): {e}")
-                    failed += 1
-            
-            await status_msg.edit_text(
-                f"📊 *Duyuru Tamamlandı*\n\n"
-                f"✅ Başarılı: {success}\n"
-                f"❌ Başarısız: {failed}\n"
-                f"👥 Toplam: {total_users}",
-                parse_mode='Markdown'
-            )
-            
-        except Exception as e:
-            logger.error(f"Duyuru işlemi hatası: {e}")
-            await status_msg.edit_text(
-                f"❌ *Duyuru Gönderilirken Hata Oluştu*\n\n"
-                f"Hata: {str(e)}",
-                parse_mode='Markdown'
-            )
-        
-        del context.user_data['admin_state']
+                        success += 1
+                        if success % 5 == 0 or success == total_users:
+                            await status_msg.edit_text(
+                                f"📤 Duyuru gönderiliyor... ({success}/{total_users})"
+                            )
+                            await asyncio.sleep(0.1)  # Küçük bir gecikme ekle
+                    except Exception as e:
+                        logger.error(f"Duyuru gönderme hatası (User: {user_id}): {e}")
+                        failed += 1
+                        await asyncio.sleep(0.1)  # Hata durumunda da gecikme ekle
+                
+                await status_msg.edit_text(
+                    f"📊 *Duyuru Tamamlandı*\n\n"
+                    f"✅ Başarılı: {success}\n"
+                    f"❌ Başarısız: {failed}\n"
+                    f"👥 Toplam: {total_users}",
+                    parse_mode='Markdown'
+                )
+                
+            except Exception as e:
+                logger.error(f"Duyuru işlemi hatası: {e}")
+                await status_msg.edit_text(
+                    f"❌ *Duyuru Gönderilirken Hata Oluştu*\n\n"
+                    f"Hata: {str(e)}",
+                    parse_mode='Markdown'
+                )
+            finally:
+                # Her durumda state'i temizle
+                if 'admin_state' in context.user_data:
+                    del context.user_data['admin_state']
+                
+    except Exception as e:
+        logger.error(f"Admin handler hatası: {e}")
+        if 'admin_state' in context.user_data:
+            del context.user_data['admin_state']
 
 async def cancel_admin_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Admin işlemini iptal et"""
