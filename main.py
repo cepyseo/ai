@@ -901,7 +901,7 @@ async def view_default_thumb(update: Update, context: ContextTypes.DEFAULT_TYPE)
 # AI Sohbet Fonksiyonu
 @require_credits('ai_chat')
 async def ai_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """AI sohbeti başlat"""
+    """AI sohbeti başlat veya mesaj gönder"""
     try:
         user_id = update.effective_user.id
         
@@ -910,20 +910,45 @@ async def ai_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("⛔️ Bottan yasaklandınız!")
             return
             
-        # AI sohbeti aktifleştir
-        context.user_data['ai_chat_active'] = True
-        
-        await update.message.reply_text(
-            "🤖 *AI Sohbet Başlatıldı*\n\n"
-            "• Benimle istediğiniz konuda sohbet edebilirsiniz\n"
-            "• Sohbeti sonlandırmak için /ai_clear yazın\n"
-            "• Sohbet geçmişini görmek için /ai_history yazın",
-            parse_mode='Markdown'
-        )
+        # Komut argümanlarını kontrol et
+        if context.args:
+            # Doğrudan mesaj gönderme
+            message = " ".join(context.args)
+            
+            # Bekleme mesajı gönder
+            wait_message = await update.message.reply_text(
+                "🤔 Düşünüyorum...",
+                parse_mode='Markdown'
+            )
+            
+            # Mesajı işle
+            response = await chat_service.process_message(user_id, message)
+            
+            # Bekleme mesajını sil
+            await wait_message.delete()
+            
+            # Yanıt gönder
+            await update.message.reply_text(
+                f"🤖 *AI Yanıtı:*\n\n{response}",
+                parse_mode='Markdown'
+            )
+        else:
+            # AI sohbeti aktifleştir
+            context.user_data['ai_chat_active'] = True
+            
+            await update.message.reply_text(
+                "🤖 *AI Sohbet Başlatıldı*\n\n"
+                "• Benimle istediğiniz konuda sohbet edebilirsiniz\n"
+                "• Sohbeti sonlandırmak için /ai_clear yazın\n"
+                "• Sohbet geçmişini görmek için /ai_history yazın\n\n"
+                "Örnek kullanım:\n"
+                "`/ai merhaba` veya doğrudan mesaj yazın",
+                parse_mode='Markdown'
+            )
         
     except Exception as e:
-        logger.error(f"AI sohbet başlatma hatası: {e}")
-        await update.message.reply_text("❌ Sohbet başlatılırken bir hata oluştu!")
+        logger.error(f"AI sohbet hatası: {e}", exc_info=True)
+        await update.message.reply_text("❌ Bir hata oluştu. Lütfen tekrar deneyin.")
 
 # Yeni ayrı komutlar ekle
 async def ai_clear(update: Update, context: ContextTypes.DEFAULT_TYPE):
