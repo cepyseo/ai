@@ -968,31 +968,18 @@ async def ai_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # Admin komutları
 async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Admin paneli"""
-    user = update.effective_user
-    if not user_manager.is_admin(user.username):
-        await update.message.reply_text("⛔️ Bu komutu kullanma yetkiniz yok!")
+    if not user_manager.is_admin(update.effective_user.username):
+        await update.message.reply_text("⛔️ Admin yetkisine sahip değilsiniz!")
         return
 
-    keyboard = [
-        [
-            InlineKeyboardButton("📢 Duyuru Yap", callback_data="admin_broadcast"),
-            InlineKeyboardButton("👑 Premium Ver", callback_data="admin_premium")
-        ],
-        [
-            InlineKeyboardButton("🚫 Kullanıcı Yasakla", callback_data="admin_ban"),
-            InlineKeyboardButton("✅ Yasak Kaldır", callback_data="admin_unban")
-        ],
-        [
-            InlineKeyboardButton("📊 İstatistikler", callback_data="admin_stats")
-        ]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-
+    # Admin state'i ayarla
+    context.user_data['admin_state'] = 'waiting_broadcast'
+    
     await update.message.reply_text(
-        "🔐 *Admin Paneli*\n\n"
-        "Yapmak istediğiniz işlemi seçin:",
-        parse_mode='Markdown',
-        reply_markup=reply_markup
+        "📢 *Duyuru Gönderme*\n\n"
+        "Lütfen göndermek istediğiniz duyuru mesajını yazın.\n"
+        "İptal etmek için /cancel yazabilirsiniz.",
+        parse_mode='Markdown'
     )
 
 # Message handler'ı ekle - admin işlemleri için
@@ -1024,8 +1011,29 @@ async def handle_admin_actions(update: Update, context: ContextTypes.DEFAULT_TYP
                 # Tüm kullanıcıları al
                 all_users = set()
                 
-                # Test kullanıcısı ekle (kendiniz)
-                all_users.add(update.effective_user.id)
+                # Chat geçmişi klasöründen kullanıcıları al
+                if CHAT_HISTORY_DIR.exists():
+                    for file in CHAT_HISTORY_DIR.glob("*.json"):
+                        try:
+                            all_users.add(int(file.stem))
+                        except ValueError:
+                            continue
+                
+                # User data klasöründen kullanıcıları al
+                if USER_DATA_DIR.exists():
+                    for file in USER_DATA_DIR.glob("*.json"):
+                        try:
+                            all_users.add(int(file.stem))
+                        except ValueError:
+                            continue
+                
+                # User credits klasöründen kullanıcıları al
+                if USER_CREDITS_DIR.exists():
+                    for file in USER_CREDITS_DIR.glob("*.json"):
+                        try:
+                            all_users.add(int(file.stem))
+                        except ValueError:
+                            continue
                 
                 # Premium kullanıcıları ekle
                 if hasattr(user_manager, 'premium_users'):
@@ -1033,14 +1041,6 @@ async def handle_admin_actions(update: Update, context: ContextTypes.DEFAULT_TYP
                         try:
                             all_users.add(int(user_id))
                         except (ValueError, TypeError):
-                            continue
-                
-                # Normal kullanıcıları ekle
-                if USER_CREDITS_DIR.exists():
-                    for file in USER_CREDITS_DIR.glob("*.json"):
-                        try:
-                            all_users.add(int(file.stem))
-                        except ValueError:
                             continue
                 
                 total_users = len(all_users)
@@ -1062,15 +1062,15 @@ async def handle_admin_actions(update: Update, context: ContextTypes.DEFAULT_TYP
                             parse_mode='Markdown'
                         )
                         success += 1
+                        await asyncio.sleep(0.05)  # Rate limit'e takılmamak için
                         if success % 5 == 0 or success == total_users:
                             await status_msg.edit_text(
                                 f"📤 Duyuru gönderiliyor... ({success}/{total_users})"
                             )
-                            await asyncio.sleep(0.1)  # Küçük bir gecikme ekle
                     except Exception as e:
                         logger.error(f"Duyuru gönderme hatası (User: {user_id}): {e}")
                         failed += 1
-                        await asyncio.sleep(0.1)  # Hata durumunda da gecikme ekle
+                        await asyncio.sleep(0.05)
                 
                 await status_msg.edit_text(
                     f"📊 *Duyuru Tamamlandı*\n\n"
@@ -1088,7 +1088,6 @@ async def handle_admin_actions(update: Update, context: ContextTypes.DEFAULT_TYP
                     parse_mode='Markdown'
                 )
             finally:
-                # Her durumda state'i temizle
                 if 'admin_state' in context.user_data:
                     del context.user_data['admin_state']
                 
