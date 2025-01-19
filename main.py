@@ -26,6 +26,11 @@ from hypercorn.asyncio import serve
 import httpx
 from config.settings import TOKEN, CONNECT_TIMEOUT, READ_TIMEOUT, WRITE_TIMEOUT, POOL_TIMEOUT
 from web.app import create_app
+from handlers.stats import show_stats
+from handlers.callback_handlers import handle_callback_query
+from handlers.chat_handlers import handle_chat
+from services.user_service import UserService
+from services.chat_service import ChatService
 
 # Zaman dilimi ayarı
 os.environ['TZ'] = 'UTC'  # UTC zaman dilimini ayarla
@@ -71,6 +76,10 @@ USER_CREDITS_DIR = Path("user_credits")  # Eklendi
 USER_DATA_DIR.mkdir(exist_ok=True)
 CHAT_HISTORY_DIR.mkdir(exist_ok=True)
 USER_CREDITS_DIR.mkdir(exist_ok=True)  # Eklendi
+
+# Global servisleri oluştur
+user_service = UserService()
+chat_service = ChatService()
 
 def setup_project():
     """Proje yapısını oluştur"""
@@ -1224,15 +1233,17 @@ async def init_application():
         CommandHandler('ai_history', ai_history),
         CommandHandler('admin', admin_panel),
         CommandHandler('cancel', cancel_admin_action),
-        MessageHandler((filters.PHOTO | filters.Document.ALL) & ~filters.COMMAND, process_file),
-        MessageHandler(filters.TEXT & ~filters.COMMAND, handle_admin_actions),
-        CallbackQueryHandler(button_callback),
         CommandHandler('stats', show_stats),
+        MessageHandler((filters.PHOTO | filters.Document.ALL) & ~filters.COMMAND, process_file),
+        MessageHandler(filters.TEXT & ~filters.COMMAND, handle_chat),
         CallbackQueryHandler(handle_callback_query)
     ]
 
     for handler in handlers:
         application.add_handler(handler)
+
+    # Hata handler'ını ekle
+    application.add_error_handler(error_handler)
 
     return application
 
