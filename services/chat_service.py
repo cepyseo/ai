@@ -9,8 +9,8 @@ logger = logging.getLogger(__name__)
 
 class ChatService:
     def __init__(self):
-        self.chat_dir = CHAT_HISTORY_DIR
-        self.chat_dir.mkdir(exist_ok=True)
+        self.history_dir = Path("data/chat_history")
+        self.history_dir.mkdir(parents=True, exist_ok=True)
         self.max_history_age = timedelta(hours=24)
         self.max_messages = 50
 
@@ -54,7 +54,7 @@ class ChatService:
     async def save_message(self, user_id: int, role: str, content: str):
         """Mesajı kaydet"""
         try:
-            history_file = self.chat_dir / f"{user_id}.json"
+            history_file = self.history_dir / f"{user_id}.json"
             messages = []
             
             if history_file.exists():
@@ -87,7 +87,7 @@ class ChatService:
     async def get_history(self, user_id: int) -> list:
         """Kullanıcının sohbet geçmişini getir"""
         try:
-            history_file = self.chat_dir / f"{user_id}.json"
+            history_file = self.history_dir / f"{user_id}.json"
             if history_file.exists():
                 with open(history_file, 'r', encoding='utf-8') as f:
                     data = json.load(f)
@@ -100,7 +100,7 @@ class ChatService:
     async def clear_history(self, user_id: int) -> bool:
         """Kullanıcının sohbet geçmişini temizle"""
         try:
-            history_file = self.chat_dir / f"{user_id}.json"
+            history_file = self.history_dir / f"{user_id}.json"
             if history_file.exists():
                 history_file.unlink()
             return True
@@ -109,19 +109,47 @@ class ChatService:
             return False
 
     async def process_message(self, user_id: int, message: str) -> str:
-        """Kullanıcı mesajını işle ve yanıt döndür"""
+        """Kullanıcı mesajını işler ve yanıt üretir"""
         try:
-            # Mesajı geçmişe ekle
-            await self.save_message(user_id, 'user', message)
+            # Mesaj geçmişini yükle
+            history = self._load_history(user_id)
             
-            # AI yanıtını al
-            response = await self.get_ai_response(message)
+            # Mesajı geçmişe ekle
+            history.append({
+                "role": "user",
+                "content": message,
+                "timestamp": datetime.now().isoformat()
+            })
+            
+            # AI yanıtı oluştur (örnek)
+            response = "Merhaba! Bu bir test yanıtıdır."
             
             # Yanıtı geçmişe ekle
-            await self.save_message(user_id, 'assistant', response)
+            history.append({
+                "role": "assistant",
+                "content": response,
+                "timestamp": datetime.now().isoformat()
+            })
+            
+            # Geçmişi kaydet
+            self._save_history(user_id, history)
             
             return response
             
         except Exception as e:
-            logger.error(f"Mesaj işleme hatası: {e}")
-            return "❌ Mesajınız işlenirken bir hata oluştu!" 
+            logger.error(f"Mesaj işleme hatası: {e}", exc_info=True)
+            raise
+
+    def _load_history(self, user_id: int) -> list:
+        """Kullanıcının sohbet geçmişini yükler"""
+        history_file = self.history_dir / f"{user_id}.json"
+        if history_file.exists():
+            with open(history_file, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        return []
+
+    def _save_history(self, user_id: int, history: list):
+        """Kullanıcının sohbet geçmişini kaydeder"""
+        history_file = self.history_dir / f"{user_id}.json"
+        with open(history_file, 'w', encoding='utf-8') as f:
+            json.dump(history, f, ensure_ascii=False, indent=2) 

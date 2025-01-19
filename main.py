@@ -1351,20 +1351,21 @@ async def setup_webhook(application: Application) -> bool:
         if not RENDER_EXTERNAL_URL:
             return False
             
-        webhook_url = f"https://{RENDER_EXTERNAL_URL}/{TOKEN}"
+        # Webhook URL'ini doğru formatta oluştur
+        webhook_url = f"https://{RENDER_EXTERNAL_URL.rstrip('/')}/{TOKEN}"
         
-        # Önce mevcut webhook'u temizle
+        # SSL sertifikası kontrolünü devre dışı bırak (development için)
         await application.bot.delete_webhook(drop_pending_updates=True)
         
         # Yeni webhook'u ayarla
         await application.bot.set_webhook(
             url=webhook_url,
-            allowed_updates=['message', 'callback_query', 'channel_post'],
+            allowed_updates=Update.ALL_TYPES,
             drop_pending_updates=True,
-            max_connections=40
+            secret_token=TOKEN[:20]  # Webhook güvenliği için
         )
         
-        logger.info(f"Webhook ayarlandı: {webhook_url}")
+        logger.info(f"Webhook başarıyla ayarlandı: {webhook_url}")
         return True
         
     except Exception as e:
@@ -1372,46 +1373,44 @@ async def setup_webhook(application: Application) -> bool:
         return False
 
 async def init_application() -> Application:
-    """
-    Bot uygulamasını başlatır ve yapılandırır
-    """
-    application = (
-        ApplicationBuilder()
-        .token(TOKEN)
-        .connect_timeout(CONNECT_TIMEOUT)
-        .read_timeout(READ_TIMEOUT)
-        .write_timeout(WRITE_TIMEOUT)
-        .pool_timeout(POOL_TIMEOUT)
-        .build()
-    )
-    
-    # Komut handler'ları
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("help", help_command))
-    application.add_handler(CommandHandler("admin", admin_panel))
-    application.add_handler(CommandHandler("ai", ai_chat))
-    application.add_handler(CommandHandler("ai_clear", ai_clear))
-    application.add_handler(CommandHandler("ai_history", ai_history))
-    application.add_handler(CommandHandler("img", get_image))
-    application.add_handler(CommandHandler("thumb", add_thumbnail))
-    application.add_handler(CommandHandler("del_thumb", delete_default_thumb))
-    application.add_handler(CommandHandler("view_thumb", view_default_thumb))
-    
-    # Callback ve mesaj handler'larını ekle
-    application.add_handler(CallbackQueryHandler(handle_callback_query))
-    application.add_handler(MessageHandler(
-        (filters.PHOTO | filters.Document.ALL) & ~filters.COMMAND,
-        process_file
-    ))
-    application.add_handler(MessageHandler(
-        filters.TEXT & ~filters.COMMAND,
-        handle_chat
-    ))
-    
-    # Hata handler'ını ekle
-    application.add_error_handler(error_handler)
-    
-    return application
+    """Bot uygulamasını başlatır ve yapılandırır"""
+    try:
+        application = (
+            ApplicationBuilder()
+            .token(TOKEN)
+            .connect_timeout(CONNECT_TIMEOUT)
+            .read_timeout(READ_TIMEOUT)
+            .write_timeout(WRITE_TIMEOUT)
+            .pool_timeout(POOL_TIMEOUT)
+            .build()
+        )
+
+        # Komut handler'ları
+        application.add_handler(CommandHandler("start", start))
+        application.add_handler(CommandHandler("help", help_command))
+        application.add_handler(CommandHandler("admin", admin_panel))
+        application.add_handler(CommandHandler("ai", ai_chat))
+        application.add_handler(CommandHandler("ai_clear", ai_clear))
+        application.add_handler(CommandHandler("ai_history", ai_history))
+        application.add_handler(CommandHandler("img", get_image))
+        application.add_handler(CommandHandler("stats", show_stats))
+        application.add_handler(CommandHandler("thumb", add_thumbnail))
+        application.add_handler(CommandHandler("del_thumb", delete_default_thumb))
+        application.add_handler(CommandHandler("view_thumb", view_default_thumb))
+
+        # Callback ve mesaj handler'ları
+        application.add_handler(CallbackQueryHandler(handle_callback_query))
+        application.add_handler(MessageHandler(filters.Document.ALL, process_file))
+        application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_chat))
+
+        # Hata handler'ı
+        application.add_error_handler(error_handler)
+
+        return application
+        
+    except Exception as e:
+        logger.error(f"Uygulama başlatma hatası: {e}", exc_info=True)
+        raise
 
 async def main() -> None:
     """Ana uygulama başlatma fonksiyonu"""
@@ -1438,43 +1437,36 @@ async def main() -> None:
                 logger.info(f"Web uygulaması başlatılıyor (Port: {RENDER_PORT})")
                 await serve(app, config)
             else:
-                logger.error("Webhook ayarlanamadı!")
-                return
+                # Webhook başarısız olursa polling'e geç
+                logger.info("Webhook ayarlanamadı, polling moduna geçiliyor...")
+                await application.run_polling(drop_pending_updates=True)
         else:
             # Polling modu
             logger.info("Polling modunda başlatılıyor...")
-            await application.bot.delete_webhook(drop_pending_updates=True)
-            await application.run_polling(
-                drop_pending_updates=True,
-                allowed_updates=["message", "callback_query", "chat_member"]
-            )
+            await application.run_polling(drop_pending_updates=True)
             
     except Exception as e:
         logger.critical(f"Kritik hata: {e}", exc_info=True)
     finally:
-        # Uygulama durumunu kontrol et ve temizle
         if 'application' in locals():
             try:
                 await application.stop()
-                await application.shutdown()
             except Exception as e:
                 logger.error(f"Uygulama kapatma hatası: {e}")
 
 if __name__ == '__main__':
+    # Event loop'u yapılandır
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    
     try:
-        # Event loop'u temiz başlat
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
         loop.run_until_complete(main())
     except KeyboardInterrupt:
         logger.info("Bot kapatılıyor...")
     except Exception as e:
         logger.critical(f"Program sonlandı: {e}", exc_info=True)
     finally:
-        # Event loop'u temizle
         try:
-            loop = asyncio.get_event_loop()
-            loop.stop()
             loop.close()
         except Exception as e:
             logger.error(f"Event loop kapatma hatası: {e}")

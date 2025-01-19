@@ -20,7 +20,7 @@ Key Requirements:
 
 # 📁 Project Structure
 ├─ 📄 admin_utils.py (140 lines) - Python script containing project logic
-├─ 📄 main.py (1505 lines) - Python script containing project logic
+├─ 📄 main.py (1478 lines) - Python script containing project logic
 ├─ 📄 setup_project.py (21 lines) - Python script containing project logic
 ├─ 📁 config
 │  ├─ 📄 logging_config.py (9 lines) - Python script containing project logic
@@ -42,14 +42,15 @@ Key Requirements:
 ├─ 📁 services
 │  ├─ 📄 ai_service.py (20 lines) - Python script containing project logic
 │  ├─ 📄 backup_service.py (52 lines) - Python script containing project logic
-│  ├─ 📄 chat_service.py (127 lines) - Python script containing project logic
+│  ├─ 📄 chat_service.py (155 lines) - Python script containing project logic
 │  ├─ 📄 file_service.py (47 lines) - Python script containing project logic
 │  ├─ 📄 image_service.py (18 lines) - Python script containing project logic
 │  ├─ 📄 language_service.py (35 lines) - Python script containing project logic
 │  ├─ 📄 premium_service.py (39 lines) - Python script containing project logic
-│  └─ 📄 user_service.py (110 lines) - Python script containing project logic
+│  ├─ 📄 setup_service.py (35 lines) - Python script containing project logic
+│  └─ 📄 user_service.py (106 lines) - Python script containing project logic
 ├─ 📁 utils
-│  ├─ 📄 credits.py (44 lines) - Python script containing project logic
+│  ├─ 📄 credits.py (49 lines) - Python script containing project logic
 │  ├─ 📄 decorators.py (16 lines) - Python script containing project logic
 │  └─ 📄 helpers.py (13 lines) - Python script containing project logic
 └─ 📁 web
@@ -119,9 +120,11 @@ Functions:
 - handle_chat
 - is_admin
 
-`services\chat_service.py` (127 lines)
+`services\chat_service.py` (155 lines)
 Functions:
 - ChatService
+- _load_history
+- _save_history
 - clear_history
 - get_ai_response
 - get_history
@@ -146,7 +149,7 @@ Functions:
 Functions:
 - start
 
-`utils\credits.py` (44 lines)
+`utils\credits.py` (49 lines)
 Functions:
 - check_credits
 - update_credits
@@ -195,7 +198,7 @@ Functions:
 Functions:
 - setup_logging
 
-`main.py` (1505 lines)
+`main.py` (1478 lines)
 Functions:
 - ChatHistory
 - _load_history
@@ -242,7 +245,6 @@ Functions:
 - setup_project
 - setup_webhook
 - start
-- start_bot
 - view_default_thumb
 - webhook
 - wrapper
@@ -260,14 +262,17 @@ Functions:
 Functions:
 - create_project_structure
 
+`services\setup_service.py` (35 lines)
+Functions:
+- setup_project
+
 `handlers\stats.py` (34 lines)
 Functions:
 - show_stats
 
-`services\user_service.py` (110 lines)
+`services\user_service.py` (106 lines)
 Functions:
 - UserService
-- _create_default_stats
 - get_active_users_today
 - get_all_users
 - get_premium_users
@@ -277,9 +282,9 @@ Functions:
 - update_stats
 
 # 📊 Project Overview
-**Files:** 30  |  **Lines:** 3,023
+**Files:** 31  |  **Lines:** 3,060
 
 ## 📁 File Distribution
-- .py: 30 files (3,023 lines)
+- .py: 31 files (3,060 lines)
 
-*Updated: January 19, 2025 at 05:16 PM*
+*Updated: January 19, 2025 at 05:22 PM*

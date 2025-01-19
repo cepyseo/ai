@@ -8,43 +8,39 @@ logger = logging.getLogger(__name__)
 
 class UserService:
     def __init__(self):
-        self.user_data_dir = USER_DATA_DIR
+        self.user_data_dir = Path("data/user_data")
+        self.user_data_dir.mkdir(parents=True, exist_ok=True)
         self.credits_dir = USER_CREDITS_DIR
-        self.user_data_dir.mkdir(exist_ok=True)
         self.credits_dir.mkdir(exist_ok=True)
         
     async def get_user_stats(self, user_id: int) -> dict:
-        """Kullanıcı istatistiklerini getir"""
+        """Kullanıcı istatistiklerini getirir"""
         try:
             stats_file = self.user_data_dir / f"{user_id}.json"
             if stats_file.exists():
                 with open(stats_file, 'r', encoding='utf-8') as f:
                     return json.load(f)
-            return self._create_default_stats()
+            return {
+                'ai_chats': 0,
+                'processed_files': 0,
+                'image_searches': 0,
+                'credits': 10,  # Yeni kullanıcılar için başlangıç kredisi
+                'total_messages': 0,
+                'last_active': datetime.now().isoformat()
+            }
         except Exception as e:
-            logger.error(f"Kullanıcı istatistikleri alınamadı: {e}")
-            return self._create_default_stats()
+            logger.error(f"Kullanıcı istatistikleri getirme hatası: {e}", exc_info=True)
+            raise
             
-    def _create_default_stats(self) -> dict:
-        return {
-            "total_messages": 0,
-            "images_generated": 0,
-            "files_processed": 0,
-            "join_date": datetime.now().isoformat(),
-            "last_active": datetime.now().isoformat(),
-            "premium_until": None
-        }
-
-    async def update_stats(self, user_id: int, stats: dict) -> bool:
-        """Kullanıcı istatistiklerini güncelle"""
+    async def update_stats(self, user_id: int, stats: dict):
+        """Kullanıcı istatistiklerini günceller"""
         try:
             stats_file = self.user_data_dir / f"{user_id}.json"
             with open(stats_file, 'w', encoding='utf-8') as f:
                 json.dump(stats, f, ensure_ascii=False, indent=2)
-            return True
         except Exception as e:
-            logger.error(f"İstatistik güncelleme hatası: {e}")
-            return False
+            logger.error(f"İstatistik güncelleme hatası: {e}", exc_info=True)
+            raise
             
     async def get_all_users(self) -> list:
         """Tüm kullanıcı ID'lerini getir"""
