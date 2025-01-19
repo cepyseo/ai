@@ -496,33 +496,7 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
                 )
                 
             elif query.data == "help":
-                help_text = (
-                    "🔍 *Yardım Menüsü*\n\n"
-                    "*AI Sohbet:*\n"
-                    "• AI ile sohbet etmek için /ai komutunu kullanın\n"
-                    "• Örnek: `/ai merhaba` veya sadece mesaj yazın\n\n"
-                    "*Görsel Arama:*\n"
-                    "• Görsel aramak için /img komutunu kullanın\n"
-                    "• Örnek: `/img kedi`\n\n"
-                    "*Dosya İşlemleri:*\n"
-                    "• Dosyalara küçük resim eklemek için /thumb kullanın\n"
-                    "• Varsayılan küçük resmi silmek için /del_thumb\n"
-                    "• Mevcut küçük resmi görmek için /view_thumb\n\n"
-                    "*Kredi Sistemi:*\n"
-                    "• Her işlem için belirli krediler gerekir\n"
-                    "• Premium üyelik için @Cepyseo ile iletişime geçin\n\n"
-                    "❓ Başka sorunuz varsa @Cepyseo'ya yazabilirsiniz"
-                )
-                
-                keyboard = [[
-                    InlineKeyboardButton("◀️ Geri", callback_data="back_to_start")
-                ]]
-                
-                await query.message.edit_text(
-                    help_text,
-                    parse_mode='Markdown',
-                    reply_markup=InlineKeyboardMarkup(keyboard)
-                )
+                help_command(update, context)
                 
             elif query.data == "back_to_start":
                 # Ana menüye dön
@@ -1182,25 +1156,30 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_admin_actions(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Admin işlemlerini yöneten handler"""
     try:
+        # Mesaj kontrolü
         if not update.message or not update.message.text:
             return
 
-        if 'admin_state' not in context.user_data:
-            return
-        
+        # Admin kontrolü
         if not user_manager.is_admin(update.effective_user.username):
             await update.message.reply_text("⛔️ Admin yetkisine sahip değilsiniz!")
             return
 
-        state = context.user_data['admin_state']
-        
-        if state == 'waiting_broadcast':
-            broadcast_msg = update.message.text
-            if broadcast_msg.lower() == '/cancel':
-                del context.user_data['admin_state']
-                await update.message.reply_text("❌ Duyuru iptal edildi.")
-                return
+        # Admin state kontrolü
+        admin_state = context.user_data.get('admin_state')
+        if not admin_state:
+            return
 
+        # İptal komutu kontrolü
+        if update.message.text.lower() == '/cancel':
+            if 'admin_state' in context.user_data:
+                del context.user_data['admin_state']
+            await update.message.reply_text("❌ İşlem iptal edildi.")
+            return
+
+        # Admin işlemleri
+        if admin_state == 'waiting_broadcast':
+            broadcast_msg = update.message.text
             status_msg = await update.message.reply_text("📢 Duyuru hazırlanıyor...")
             
             try:
@@ -1314,7 +1293,7 @@ async def handle_admin_actions(update: Update, context: ContextTypes.DEFAULT_TYP
                 if 'admin_state' in context.user_data:
                     del context.user_data['admin_state']
         
-        elif state == 'waiting_premium_user':
+        elif admin_state == 'waiting_premium_user':
             try:
                 user_id = int(update.message.text)
                 user_manager.add_premium(user_id)
@@ -1324,7 +1303,7 @@ async def handle_admin_actions(update: Update, context: ContextTypes.DEFAULT_TYP
             finally:
                 del context.user_data['admin_state']
         
-        elif state == 'waiting_ban_user':
+        elif admin_state == 'waiting_ban_user':
             try:
                 user_id = int(update.message.text)
                 user_manager.ban_user(user_id)
@@ -1334,7 +1313,7 @@ async def handle_admin_actions(update: Update, context: ContextTypes.DEFAULT_TYP
             finally:
                 del context.user_data['admin_state']
         
-        elif state == 'waiting_unban_user':
+        elif admin_state == 'waiting_unban_user':
             try:
                 user_id = int(update.message.text)
                 user_manager.unban_user(user_id)
@@ -1481,6 +1460,122 @@ async def main() -> None:
                 await application.shutdown()
             except Exception as shutdown_error:
                 logger.error(f"Uygulama kapatma hatası: {shutdown_error}")
+
+async def show_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Bot istatistiklerini göster"""
+    try:
+        # Admin kontrolü
+        if not user_manager.is_admin(update.effective_user.username):
+            await update.message.reply_text("⛔️ Bu komutu sadece adminler kullanabilir!")
+            return
+
+        # İstatistikleri getir
+        total_users = await user_service.get_total_users()
+        active_users = await user_service.get_active_users_today()
+        
+        # Sistem bilgilerini al
+        memory_usage = psutil.Process().memory_info().rss / 1024 / 1024  # MB
+        cpu_percent = psutil.Process().cpu_percent()
+        disk_usage = psutil.disk_usage('/').percent
+        
+        stats_text = (
+            "📊 *Bot İstatistikleri*\n\n"
+            f"👥 Toplam Kullanıcı: `{total_users}`\n"
+            f"📱 Bugün Aktif: `{active_users}`\n"
+            "*Sistem Bilgileri:*\n"
+            f"💾 RAM Kullanımı: `{memory_usage:.1f} MB`\n"
+            f"⚡️ CPU Kullanımı: `{cpu_percent}%`\n"
+            f"💽 Disk Kullanımı: `{disk_usage}%`\n"
+            f"⏱️ Çalışma Süresi: `{datetime.now().strftime('%H:%M:%S')}`"
+        )
+
+        keyboard = [
+            [
+                InlineKeyboardButton("🔄 Yenile", callback_data="refresh_stats"),
+                InlineKeyboardButton("📢 Kanal", url=f"https://t.me/{CHANNEL_USERNAME.replace('@', '')}")
+            ]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+
+        await update.message.reply_text(
+            stats_text,
+            parse_mode='Markdown',
+            reply_markup=reply_markup
+        )
+
+    except Exception as e:
+        logger.error(f"İstatistik gösterme hatası: {e}")
+        await update.message.reply_text("❌ İstatistikler alınırken bir hata oluştu!")
+
+async def handle_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Normal mesajları işle"""
+    try:
+        # Mesaj kontrolü
+        if not update.message or not update.message.text:
+            return
+
+        # Admin işlemleri kontrolü
+        if 'admin_state' in context.user_data:
+            await handle_admin_actions(update, context)
+            return
+
+        # Rename işlemi kontrolü
+        if 'waiting_rename' in context.user_data:
+            await handle_rename_response(update, context)
+            return
+
+        # AI sohbet kontrolü
+        if context.user_data.get('ai_chat_active', False):
+            # Yasaklı kullanıcı kontrolü
+            if user_manager.is_banned(update.effective_user.id):
+                await update.message.reply_text("⛔️ Bottan yasaklandınız!")
+                return
+
+            # Kredi kontrolü
+            credits = UserCredits(update.effective_user.id)
+            if not credits.check_credits('ai_chat') and not user_manager.is_premium(update.effective_user.id):
+                remaining = credits.get_credits()
+                await update.message.reply_text(
+                    f"❌ Günlük AI sohbet limitiniz doldu!\n\n"
+                    f"🔄 Limitler her gün sıfırlanır.\n"
+                    f"👑 Premium üyelik için: @Cepyseo\n\n"
+                    f"📊 Kalan Kredileriniz:\n"
+                    f"🤖 AI Sohbet: {remaining['ai_chat']}\n"
+                    f"🖼️ Görsel Arama: {remaining['image_search']}\n"
+                    f"📁 Dosya İşlemleri: {remaining['file_operations']}"
+                )
+                return
+
+            # Bekleme mesajı
+            wait_message = await update.message.reply_text(
+                "🤔 Düşünüyorum...",
+                parse_mode='Markdown'
+            )
+
+            try:
+                # Mesajı işle
+                response = await chat_service.process_message(update.effective_user.id, update.message.text)
+                
+                # Krediyi kullan (premium değilse)
+                if not user_manager.is_premium(update.effective_user.id):
+                    credits.use_credit('ai_chat')
+
+                # Bekleme mesajını sil
+                await wait_message.delete()
+
+                # Yanıtı gönder
+                await update.message.reply_text(
+                    f"🤖 *AI Yanıtı:*\n\n{response}",
+                    parse_mode='Markdown'
+                )
+
+            except Exception as e:
+                logger.error(f"AI yanıt hatası: {e}")
+                await wait_message.edit_text("❌ Yanıt oluşturulurken bir hata oluştu!")
+
+    except Exception as e:
+        logger.error(f"Mesaj işleme hatası: {e}")
+        await update.message.reply_text("❌ Bir hata oluştu. Lütfen tekrar deneyin.")
 
 if __name__ == '__main__':
     try:
