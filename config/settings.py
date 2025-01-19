@@ -43,7 +43,7 @@ if RENDER_EXTERNAL_URL:
     # URL'i temizle ve formatla
     RENDER_EXTERNAL_URL = RENDER_EXTERNAL_URL.replace('https://', '').replace('http://', '').rstrip('/')
     WEBHOOK_URL = f"https://{RENDER_EXTERNAL_URL}/{TOKEN}"
-    WEBHOOK_SECRET = TOKEN[:20]  # Webhook güvenliği için
+    WEBHOOK_SECRET = "".join(c for c in TOKEN[:20] if c.isalnum())  # Sadece alfanumerik karakterler
 else:
     WEBHOOK_URL = None
     WEBHOOK_SECRET = None

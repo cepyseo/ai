@@ -1454,36 +1454,28 @@ async def main() -> None:
                 logger.info(f"Web uygulaması başlatılıyor (Port: {RENDER_PORT})")
                 await serve(app, config)
             else:
-                # Webhook başarısız olursa polling'e geç
-                logger.info("Webhook ayarlanamadı, polling moduna geçiliyor...")
-                await application.run_polling(drop_pending_updates=True)
+                logger.warning("Webhook ayarlanamadı, bot kapatılıyor...")
+                await application.shutdown()
+                return
         else:
             # Polling modu
             logger.info("Polling modunda başlatılıyor...")
+            await application.initialize()
+            await application.start()
             await application.run_polling(drop_pending_updates=True)
             
     except Exception as e:
         logger.critical(f"Kritik hata: {e}", exc_info=True)
-    finally:
         if 'application' in locals():
             try:
-                await application.stop()
-            except Exception as e:
-                logger.error(f"Uygulama kapatma hatası: {e}")
+                await application.shutdown()
+            except Exception as shutdown_error:
+                logger.error(f"Uygulama kapatma hatası: {shutdown_error}")
 
 if __name__ == '__main__':
-    # Event loop'u yapılandır
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    
     try:
-        loop.run_until_complete(main())
+        asyncio.run(main())
     except KeyboardInterrupt:
         logger.info("Bot kapatılıyor...")
     except Exception as e:
         logger.critical(f"Program sonlandı: {e}", exc_info=True)
-    finally:
-        try:
-            loop.close()
-        except Exception as e:
-            logger.error(f"Event loop kapatma hatası: {e}")
