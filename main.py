@@ -496,8 +496,36 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
                 )
                 
             elif query.data == "help":
-                help_command(update, context)
+                help_text = (
+                    "🔍 *Yardım Menüsü*\n\n"
+                    "*AI Sohbet:*\n"
+                    "• AI ile sohbet etmek için /ai komutunu kullanın\n"
+                    "• Örnek: `/ai merhaba` veya sadece mesaj yazın\n"
+                    "• Sohbeti temizlemek için /ai_clear yazın\n"
+                    "• Geçmişi görmek için /ai_history yazın\n\n"
+                    "*Görsel Arama:*\n"
+                    "• Görsel aramak için /img komutunu kullanın\n"
+                    "• Örnek: `/img kedi`\n\n"
+                    "*Dosya İşlemleri:*\n"
+                    "• Dosyalara küçük resim eklemek için /thumb kullanın\n"
+                    "• Varsayılan küçük resmi silmek için /del_thumb\n"
+                    "• Mevcut küçük resmi görmek için /view_thumb\n\n"
+                    "*Kredi Sistemi:*\n"
+                    "• Her işlem için belirli krediler gerekir\n"
+                    "• Premium üyelik için @Cepyseo ile iletişime geçin\n\n"
+                    "❓ Başka sorunuz varsa @Cepyseo'ya yazabilirsiniz"
+                )
                 
+                keyboard = [[
+                    InlineKeyboardButton("◀️ Geri", callback_data="back_to_start")
+                ]]
+                
+                await query.message.edit_text(
+                    help_text,
+                    parse_mode='Markdown',
+                    reply_markup=InlineKeyboardMarkup(keyboard)
+                )
+            
             elif query.data == "back_to_start":
                 # Ana menüye dön
                 keyboard = [
