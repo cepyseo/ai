@@ -1346,32 +1346,26 @@ RENDER_EXTERNAL_URL = os.environ.get('RENDER_EXTERNAL_URL')
 RENDER_PORT = int(os.environ.get("PORT", 10000))
 
 async def setup_webhook(application: Application) -> bool:
-    """
-    Webhook'u yapılandırır
-    """
+    """Webhook'u yapılandırır"""
     try:
         if not RENDER_EXTERNAL_URL:
-            logger.warning("RENDER_EXTERNAL_URL bulunamadı")
             return False
             
         webhook_url = f"https://{RENDER_EXTERNAL_URL}/{TOKEN}"
         
-        # Mevcut webhook'u temizle
+        # Önce mevcut webhook'u temizle
         await application.bot.delete_webhook(drop_pending_updates=True)
         
         # Yeni webhook'u ayarla
-        success = await application.bot.set_webhook(
+        await application.bot.set_webhook(
             url=webhook_url,
             allowed_updates=['message', 'callback_query', 'channel_post'],
             drop_pending_updates=True,
             max_connections=40
         )
         
-        if success:
-            logger.info(f"Webhook ayarlandı: {webhook_url}")
-            return True
-            
-        return False
+        logger.info(f"Webhook ayarlandı: {webhook_url}")
+        return True
         
     except Exception as e:
         logger.error(f"Webhook hatası: {e}", exc_info=True)
@@ -1419,85 +1413,68 @@ async def init_application() -> Application:
     
     return application
 
-async def start_bot(application: Application) -> None:
-    """
-    Botu başlatır ve gerekli hata kontrollerini yapar
-    """
-    while True:
-        try:
-            if WEBHOOK_URL:
-                # Webhook modu
-                await application.bot.set_webhook(url=WEBHOOK_URL)
-                await application.run_webhook(
-                    listen="0.0.0.0",
-                    port=WEBHOOK_PORT,
-                    webhook_url=WEBHOOK_URL
-                )
-            else:
-                # Polling modu
-                await application.bot.delete_webhook(drop_pending_updates=True)
-                await application.run_polling(
-                    drop_pending_updates=True,
-                    allowed_updates=["message", "callback_query", "chat_member"]
-                )
-            
-        except (NetworkError, TimedOut) as e:
-            logger.error(f"Bağlantı hatası oluştu: {e}", exc_info=True)
-            # Yeniden bağlanmadan önce bekle
-            await asyncio.sleep(10)
-            continue
-            
-        except Exception as e:
-            logger.critical(f"Kritik hata oluştu: {e}", exc_info=True)
-            # Ciddi bir hata durumunda programı sonlandır
-            break
-
 async def main() -> None:
-    """
-    Ana uygulama başlatma fonksiyonu
-    """
+    """Ana uygulama başlatma fonksiyonu"""
     try:
         # Proje yapısını kur
         setup_project()
         
         # Bot uygulamasını başlat
         application = await init_application()
-        await application.initialize()
         
-        # Web uygulamasını yapılandır
-        app.bot_application = application
-        
-        # Hypercorn ayarları
-        config = Config()
-        config.bind = [f"0.0.0.0:{RENDER_PORT}"]
-        config.use_reloader = False
-        config.workers = 1
-        config.graceful_timeout = 10
-        
-        # Webhook'u ayarla
-        webhook_success = await setup_webhook(application)
-        
-        if webhook_success:
-            logger.info(f"Web uygulaması başlatılıyor (Port: {RENDER_PORT})")
-            await serve(app, config)
+        if RENDER_EXTERNAL_URL:
+            # Webhook modu
+            webhook_success = await setup_webhook(application)
+            if webhook_success:
+                # Web uygulamasını yapılandır
+                app.bot_application = application
+                
+                # Hypercorn ayarları
+                config = Config()
+                config.bind = [f"0.0.0.0:{RENDER_PORT}"]
+                config.use_reloader = False
+                config.workers = 1
+                
+                logger.info(f"Web uygulaması başlatılıyor (Port: {RENDER_PORT})")
+                await serve(app, config)
+            else:
+                logger.error("Webhook ayarlanamadı!")
+                return
         else:
+            # Polling modu
             logger.info("Polling modunda başlatılıyor...")
-            await application.run_polling(drop_pending_updates=True)
+            await application.bot.delete_webhook(drop_pending_updates=True)
+            await application.run_polling(
+                drop_pending_updates=True,
+                allowed_updates=["message", "callback_query", "chat_member"]
+            )
             
     except Exception as e:
         logger.critical(f"Kritik hata: {e}", exc_info=True)
-        raise
     finally:
+        # Uygulama durumunu kontrol et ve temizle
         if 'application' in locals():
-            await application.stop()
-            await application.shutdown()
-
-# Quart app ayarlarını güncelle
-app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024  # 10MB
-app.config['PROPAGATE_EXCEPTIONS'] = True
+            try:
+                await application.stop()
+                await application.shutdown()
+            except Exception as e:
+                logger.error(f"Uygulama kapatma hatası: {e}")
 
 if __name__ == '__main__':
     try:
-        asyncio.run(main())
+        # Event loop'u temiz başlat
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        loop.run_until_complete(main())
+    except KeyboardInterrupt:
+        logger.info("Bot kapatılıyor...")
     except Exception as e:
         logger.critical(f"Program sonlandı: {e}", exc_info=True)
+    finally:
+        # Event loop'u temizle
+        try:
+            loop = asyncio.get_event_loop()
+            loop.stop()
+            loop.close()
+        except Exception as e:
+            logger.error(f"Event loop kapatma hatası: {e}")
