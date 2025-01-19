@@ -18,7 +18,7 @@ import psutil
 import signal
 from admin_utils import UserManager, UserCredits
 import sys
-from flask import Flask
+from flask import Flask, request
 from threading import Thread
 
 # Zaman dilimi ayarı
@@ -69,6 +69,14 @@ USER_CREDITS_DIR.mkdir(exist_ok=True)  # Eklendi
 @app.route('/')
 def home():
     return "Bot çalışıyor!"
+
+@app.route(f'/{TOKEN}', methods=['POST'])
+async def webhook():
+    """Telegram webhook handler"""
+    if request.method == 'POST':
+        update = Update.de_json(request.get_json(force=True), application.bot)
+        await application.process_update(update)
+        return 'OK'
 
 def run_flask():
     # Render için port ayarı
@@ -1051,22 +1059,14 @@ async def cancel_admin_action(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 # Ana Fonksiyon
 async def main() -> None:
-    application = None
+    global application  # Global olarak tanımla
+    
     try:
-        # Webhook'u temizle
-        requests.post(
-            f'https://api.telegram.org/bot{TOKEN}/deleteWebhook',
-            params={'drop_pending_updates': True}
-        )
-        
-        # 5 saniye bekle
-        await asyncio.sleep(5)
-        
         # Bot yapılandırması
         application = (
             ApplicationBuilder()
             .token(TOKEN)
-            .concurrent_updates(True)  # Eşzamanlı güncellemeleri etkinleştir
+            .concurrent_updates(True)
             .build()
         )
 
@@ -1094,28 +1094,25 @@ async def main() -> None:
 
         logger.info("Bot başlatılıyor...")
         
-        # Polling başlat
-        await application.initialize()
-        await application.start()
-        await application.updater.start_polling(
-            drop_pending_updates=True,
+        # Webhook URL'sini al
+        WEBHOOK_URL = f"https://{os.environ.get('RENDER_EXTERNAL_HOSTNAME')}/{TOKEN}"
+        
+        # Webhook'u ayarla
+        await application.bot.set_webhook(
+            url=WEBHOOK_URL,
             allowed_updates=Update.ALL_TYPES,
-            read_timeout=30,
-            write_timeout=30
+            drop_pending_updates=True
         )
         
         # Flask sunucusunu başlat
-        Thread(target=run_flask, daemon=True).start()
-        
-        # Sonsuz döngüde bekle
-        while True:
-            await asyncio.sleep(1)
+        port = int(os.environ.get("PORT", 8080))
+        app.run(host='0.0.0.0', port=port)
             
     except Exception as e:
         logger.error(f"Hata: {e}", exc_info=True)
     finally:
         if application:
-            await application.stop()
+            await application.bot.delete_webhook()
 
 if __name__ == '__main__':
     # Tek instance kontrolü
