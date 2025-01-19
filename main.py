@@ -1003,27 +1003,31 @@ async def handle_admin_actions(update: Update, context: ContextTypes.DEFAULT_TYP
                         except (ValueError, TypeError):
                             continue
                 
-                # Kanal ID'sini ekle
-                try:
-                    channel = await context.bot.get_chat(CHANNEL_USERNAME)
-                    all_targets.add(channel.id)
-                    logger.info(f"Kanal eklendi: {channel.id}")
-                except Exception as e:
-                    logger.error(f"Kanal bilgisi alınamadı: {e}")
-                
                 # Botun üye olduğu grupları al
                 try:
-                    # Önce kanalın üyelerini al
+                    # Kanal üyelerini al
                     admins = await context.bot.get_chat_administrators(CHANNEL_USERNAME)
                     for admin in admins:
                         if admin.user.id == context.bot.id:  # Bot'un kendisi
+                            # Kanal ID'sini ekle
+                            channel_chat = await context.bot.get_chat(CHANNEL_USERNAME)
+                            if channel_chat.type in ['channel', 'group', 'supergroup']:
+                                all_targets.add(channel_chat.id)
+                                logger.info(f"Kanal/Grup eklendi: {channel_chat.id}")
+                            
                             # Bot'un üye olduğu diğer grupları kontrol et
-                            async for chat in context.bot.get_updates():
-                                if chat.message and chat.message.chat.type in ['group', 'supergroup']:
-                                    all_targets.add(chat.message.chat.id)
-                                    logger.info(f"Grup eklendi: {chat.message.chat.id}")
+                            try:
+                                # Bot'un üye olduğu tüm sohbetleri al
+                                async with context.bot:
+                                    async for chat in context.bot.get_chat_administrators(CHANNEL_USERNAME):
+                                        if chat.chat.type in ['group', 'supergroup']:
+                                            all_targets.add(chat.chat.id)
+                                            logger.info(f"Grup eklendi: {chat.chat.id}")
+                            except Exception as e:
+                                logger.error(f"Grup listesi alınamadı: {e}")
+                
                 except Exception as e:
-                    logger.error(f"Grup listesi alınamadı: {e}")
+                    logger.error(f"Kanal/grup listesi alınamadı: {e}")
                 
                 logger.info(f"Hedef listesi: {all_targets}")
                 total_targets = len(all_targets)
