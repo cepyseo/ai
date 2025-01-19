@@ -74,24 +74,30 @@ def home():
 def webhook():
     """Telegram webhook handler"""
     if request.method == 'POST':
-        update = Update.de_json(request.get_json(force=True), application.bot)
+        # JSON verisini al
+        update_dict = request.get_json(force=True)
+        update = Update.de_json(update_dict, application.bot)
         
-        # Event loop'u al veya oluştur
+        # Yeni event loop oluştur
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        
         try:
-            loop = asyncio.get_event_loop()
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-        
-        # Update'i işle
-        loop.run_until_complete(handle_update(update))
+            # Update'i işle
+            loop.run_until_complete(handle_update(update))
+        finally:
+            loop.close()
+            
         return 'OK'
     return 'OK'
 
 async def handle_update(update: Update):
     """Update'i işle"""
-    await application.initialize()
-    await application.process_update(update)
+    try:
+        await application.initialize()
+        await application.process_update(update)
+    except Exception as e:
+        logger.error(f"Update işleme hatası: {e}")
 
 def run_flask():
     # Render için port ayarı
@@ -1114,6 +1120,7 @@ async def main() -> None:
         
         # Webhook'u ayarla
         await application.initialize()
+        await application.start()
         await application.bot.set_webhook(
             url=WEBHOOK_URL,
             allowed_updates=Update.ALL_TYPES,
@@ -1128,6 +1135,7 @@ async def main() -> None:
         logger.error(f"Hata: {e}", exc_info=True)
     finally:
         if application:
+            await application.stop()
             await application.bot.delete_webhook()
 
 if __name__ == '__main__':
