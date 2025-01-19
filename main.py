@@ -183,6 +183,12 @@ async def webhook():
         # Update'i işle
         json_data = await request.get_json()
         update = Update.de_json(json_data, app.bot_application.bot)
+        
+        # Application'ın başlatıldığından emin ol
+        if not app.bot_application._initialized:
+            await app.bot_application.initialize()
+            await app.bot_application.start()
+            
         await app.bot_application.process_update(update)
         return 'OK'
         
@@ -1444,6 +1450,10 @@ async def main() -> None:
             if webhook_success:
                 # Web uygulamasını yapılandır
                 app.bot_application = application
+                
+                # Application'ı başlat
+                await application.initialize()
+                await application.start()
                 
                 # Hypercorn ayarları
                 config = Config()
