@@ -100,6 +100,7 @@ MAX_HISTORY_LENGTH = 10  # Maksimum kaç mesajı hatırlasın
 
 # Global değişkenler
 user_manager = UserManager()
+START_TIME = datetime.now()  # Başlangıç zamanını kaydet
 
 # Global application ve app değişkenleri
 application = None
@@ -413,12 +414,17 @@ async def handle_admin_callback(update: Update, context: ContextTypes.DEFAULT_TY
             total_users = await user_service.get_total_users()
             active_users = await user_service.get_active_users_today()
             
+            # Sistem bilgilerini al
+            memory = psutil.Process().memory_info().rss / 1024 / 1024  # MB
+            uptime = datetime.now() - START_TIME
+            uptime_str = str(uptime).split('.')[0]  # Mikrosaniyeleri kaldır
+            
             stats_text = (
                 "📊 *Bot İstatistikleri*\n\n"
                 f"👥 Toplam Kullanıcı: `{total_users}`\n"
                 f"📱 Bugün Aktif: `{active_users}`\n"
-                f"💾 Bellek Kullanımı: `{psutil.Process().memory_info().rss / 1024 / 1024:.1f} MB`\n"
-                f"⏱️ Çalışma Süresi: `{datetime.now() - START_TIME}`"
+                f"💾 Bellek Kullanımı: `{memory:.1f} MB`\n"
+                f"⏱️ Çalışma Süresi: `{uptime_str}`"
             )
             
             await query.message.edit_text(
@@ -472,14 +478,14 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
                     "• /start - Botu başlat\n"
                     "• /help - Yardım menüsü\n\n"
                     "*AI Komutları:*\n"
-                    "• /ai_chat <mesaj> - AI ile sohbet et\n"
-                    "• /ai_clear - Sohbet geçmişini temizle\n"
-                    "• /ai_history - Sohbet geçmişini göster\n\n"
+                    "• /ai\\_chat - AI ile sohbet et\n"
+                    "• /ai\\_clear - Sohbet geçmişini temizle\n"
+                    "• /ai\\_history - Sohbet geçmişini göster\n\n"
                     "*Görsel Komutları:*\n"
-                    "• /image <arama> - Görsel ara\n"
-                    "• /add_thumb - Dosyaya küçük resim ekle\n"
-                    "• /del_thumb - Varsayılan küçük resmi sil\n"
-                    "• /view_thumb - Varsayılan küçük resmi göster\n\n"
+                    "• /image - Görsel ara\n"
+                    "• /add\\_thumb - Dosyaya küçük resim ekle\n"
+                    "• /del\\_thumb - Varsayılan küçük resmi sil\n"
+                    "• /view\\_thumb - Varsayılan küçük resmi göster\n\n"
                     "*İstatistikler:*\n"
                     "• /stats - Bot istatistiklerini göster\n\n"
                     "💡 Her komut hakkında detaylı bilgi için /help yazın"
@@ -499,17 +505,17 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
                 help_text = (
                     "🔍 *Yardım Menüsü*\n\n"
                     "*AI Sohbet:*\n"
-                    "• AI ile sohbet etmek için /ai_chat komutunu kullanın\n"
-                    "• Örnek: `/ai_chat merhaba` veya sadece mesaj yazın\n"
-                    "• Sohbeti temizlemek için /ai_clear yazın\n"
-                    "• Geçmişi görmek için /ai_history yazın\n\n"
+                    "• AI ile sohbet etmek için /ai\\_chat komutunu kullanın\n"
+                    "• Örnek: `/ai\\_chat merhaba` veya sadece mesaj yazın\n"
+                    "• Sohbeti temizlemek için /ai\\_clear yazın\n"
+                    "• Geçmişi görmek için /ai\\_history yazın\n\n"
                     "*Görsel Arama:*\n"
                     "• Görsel aramak için /image komutunu kullanın\n"
                     "• Örnek: `/image kedi`\n\n"
                     "*Dosya İşlemleri:*\n"
-                    "• Dosyalara küçük resim eklemek için /add_thumb kullanın\n"
-                    "• Varsayılan küçük resmi silmek için /del_thumb\n"
-                    "• Mevcut küçük resmi görmek için /view_thumb\n\n"
+                    "• Dosyalara küçük resim eklemek için /add\\_thumb kullanın\n"
+                    "• Varsayılan küçük resmi silmek için /del\\_thumb\n"
+                    "• Mevcut küçük resmi görmek için /view\\_thumb\n\n"
                     "*Kredi Sistemi:*\n"
                     "• Her işlem için belirli krediler gerekir\n"
                     "• Premium üyelik için @Cepyseo ile iletişime geçin\n\n"
