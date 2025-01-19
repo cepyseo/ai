@@ -17,7 +17,6 @@ async def handle_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Mesaj ve kullanıcı bilgilerini al
         message = update.message
         user_id = update.effective_user.id
-        chat_id = update.effective_chat.id
         
         # Admin işlemlerini kontrol et
         if 'admin_state' in context.user_data:
@@ -40,12 +39,21 @@ async def handle_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # AI sohbet aktif değilse, sadece komutları kabul et
             return
             
+        # Bekleme mesajı gönder
+        wait_message = await message.reply_text(
+            "🤔 Düşünüyorum...",
+            parse_mode='Markdown'
+        )
+            
         # Mesajı işle
         response = await chat_service.process_message(user_id, message.text)
         
+        # Bekleme mesajını sil
+        await wait_message.delete()
+        
         # Yanıt gönder
         await message.reply_text(
-            response,
+            f"🤖 *AI Yanıtı:*\n\n{response}",
             parse_mode='Markdown'
         )
         

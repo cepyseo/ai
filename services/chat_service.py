@@ -1,7 +1,8 @@
 import logging
+import json
+import httpx
 from datetime import datetime, timedelta
 from pathlib import Path
-import json
 from config.settings import CHAT_HISTORY_DIR
 
 logger = logging.getLogger(__name__)
@@ -12,6 +13,43 @@ class ChatService:
         self.chat_dir.mkdir(exist_ok=True)
         self.max_history_age = timedelta(hours=24)
         self.max_messages = 50
+
+    async def get_ai_response(self, message: str) -> str:
+        """AI'dan yanıt al"""
+        try:
+            # API isteği için parametreleri hazırla
+            api_url = "https://darkness.ashlynn.workers.dev/chat/"
+            params = {
+                "prompt": message,
+                "model": "meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo",
+                "stream": "false",
+                "temperature": 0.7
+            }
+            
+            # API isteği gönder
+            async with httpx.AsyncClient(verify=False, timeout=60.0) as client:
+                response = await client.get(
+                    api_url,
+                    params=params,
+                    headers={
+                        'User-Agent': 'Mozilla/5.0',
+                        'Accept': 'application/json'
+                    }
+                )
+                response.raise_for_status()
+                data = response.json()
+            
+            # Yanıtı işle
+            if isinstance(data, str):
+                return data
+            elif isinstance(data, dict) and data.get("response"):
+                return data['response']
+            else:
+                return "❌ Üzgünüm, yanıt alınamadı."
+                
+        except Exception as e:
+            logger.error(f"AI yanıt alma hatası: {e}")
+            return "❌ Yanıt alınırken bir hata oluştu. Lütfen daha sonra tekrar deneyin."
 
     async def save_message(self, user_id: int, role: str, content: str):
         """Mesajı kaydet"""
