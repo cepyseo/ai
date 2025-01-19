@@ -56,6 +56,16 @@ user_manager = UserManager()
 # Flask uygulaması
 app = Flask(__name__)
 
+# Dizin sabitleri
+USER_DATA_DIR = Path("user_data")
+CHAT_HISTORY_DIR = Path("chat_history")
+USER_CREDITS_DIR = Path("user_credits")  # Eklendi
+
+# Dizinleri oluştur
+USER_DATA_DIR.mkdir(exist_ok=True)
+CHAT_HISTORY_DIR.mkdir(exist_ok=True)
+USER_CREDITS_DIR.mkdir(exist_ok=True)  # Eklendi
+
 @app.route('/')
 def home():
     return "Bot çalışıyor!"
@@ -977,38 +987,56 @@ async def handle_admin_actions(update: Update, context: ContextTypes.DEFAULT_TYP
         success = 0
         failed = 0
         
-        # Tüm kullanıcıları al (premium ve normal)
-        all_users = set()
-        for file in USER_CREDITS_DIR.glob("*.json"):
-            all_users.add(int(file.stem))
-        
-        total_users = len(all_users)
-        
-        for user_id in all_users:
-            try:
-                await context.bot.send_message(
-                    chat_id=user_id,
-                    text=f"📢 *DUYURU*\n\n{broadcast_msg}",
-                    parse_mode='Markdown'
-                )
-                success += 1
-                # Her 10 kullanıcıda bir durum güncellemesi
-                if success % 10 == 0:
-                    await status_msg.edit_text(
-                        f"📤 Duyuru gönderiliyor... ({success}/{total_users})"
+        try:
+            # Tüm kullanıcıları al (premium ve normal)
+            all_users = set()
+            
+            # Premium kullanıcıları ekle
+            for user_id in user_manager.premium_users:
+                all_users.add(int(user_id))
+            
+            # Normal kullanıcıları ekle
+            for file in USER_CREDITS_DIR.glob("*.json"):
+                try:
+                    all_users.add(int(file.stem))
+                except ValueError:
+                    continue
+            
+            total_users = len(all_users)
+            
+            for user_id in all_users:
+                try:
+                    await context.bot.send_message(
+                        chat_id=user_id,
+                        text=f"📢 *DUYURU*\n\n{broadcast_msg}",
+                        parse_mode='Markdown'
                     )
-            except Exception as e:
-                logger.error(f"Duyuru gönderme hatası (User: {user_id}): {e}")
-                failed += 1
-        
-        # Final durum mesajı
-        await status_msg.edit_text(
-            f"📊 *Duyuru Tamamlandı*\n\n"
-            f"✅ Başarılı: {success}\n"
-            f"❌ Başarısız: {failed}\n"
-            f"👥 Toplam: {total_users}",
-            parse_mode='Markdown'
-        )
+                    success += 1
+                    # Her 10 kullanıcıda bir durum güncellemesi
+                    if success % 10 == 0:
+                        await status_msg.edit_text(
+                            f"📤 Duyuru gönderiliyor... ({success}/{total_users})"
+                        )
+                except Exception as e:
+                    logger.error(f"Duyuru gönderme hatası (User: {user_id}): {e}")
+                    failed += 1
+            
+            # Final durum mesajı
+            await status_msg.edit_text(
+                f"📊 *Duyuru Tamamlandı*\n\n"
+                f"✅ Başarılı: {success}\n"
+                f"❌ Başarısız: {failed}\n"
+                f"👥 Toplam: {total_users}",
+                parse_mode='Markdown'
+            )
+            
+        except Exception as e:
+            logger.error(f"Duyuru işlemi hatası: {e}")
+            await status_msg.edit_text(
+                f"❌ *Duyuru Gönderilirken Hata Oluştu*\n\n"
+                f"Hata: {str(e)}",
+                parse_mode='Markdown'
+            )
         
         # Admin state'i temizle
         del context.user_data['admin_state']
