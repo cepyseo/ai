@@ -1140,41 +1140,12 @@ async def setup_webhook():
     )
     logger.info(f"Webhook ayarlandı: {WEBHOOK_URL}")
 
-async def keep_alive():
-    """Sunucuyu canlı tut"""
-    while True:
-        try:
-            # Her 30 saniyede bir ping at
-            await asyncio.sleep(30)
-            
-            # Webhook durumunu kontrol et
-            webhook_info = await application.bot.get_webhook_info()
-            
-            if not webhook_info.url:
-                logger.warning("Webhook düşmüş, yeniden ayarlanıyor...")
-                await setup_webhook()
-            
-            # Kendi URL'mize ping at
-            url = f"https://{os.environ.get('RENDER_EXTERNAL_HOSTNAME')}/ping"
-            async with httpx.AsyncClient() as client:
-                response = await client.get(url, timeout=10.0)
-                if response.status_code == 200:
-                    logger.info("Keep-alive ping başarılı")
-                else:
-                    logger.warning(f"Keep-alive ping başarısız: {response.status_code}")
-                    
-        except Exception as e:
-            logger.error(f"Keep-alive hatası: {e}")
-            # Hata durumunda webhook'u yeniden ayarla
-            try:
-                await setup_webhook()
-            except Exception as we:
-                logger.error(f"Webhook yeniden ayarlama hatası: {we}")
-        
-        # Hata durumunda bile devam et
-        await asyncio.sleep(1)
+# Ağ ayarları ve timeout sabitleri
+CONNECT_TIMEOUT = 30.0  # Bağlantı timeout süresi
+READ_TIMEOUT = 30.0    # Okuma timeout süresi
+WRITE_TIMEOUT = 30.0   # Yazma timeout süresi
+POOL_TIMEOUT = 30.0    # Havuz timeout süresi
 
-# Ana fonksiyonu güncelle
 async def main() -> None:
     global application
     
@@ -1183,6 +1154,14 @@ async def main() -> None:
         application = (
             ApplicationBuilder()
             .token(TOKEN)
+            .connect_timeout(CONNECT_TIMEOUT)
+            .read_timeout(READ_TIMEOUT)
+            .write_timeout(WRITE_TIMEOUT)
+            .pool_timeout(POOL_TIMEOUT)
+            .get_updates_connect_timeout(CONNECT_TIMEOUT)
+            .get_updates_read_timeout(READ_TIMEOUT)
+            .get_updates_write_timeout(WRITE_TIMEOUT)
+            .get_updates_pool_timeout(POOL_TIMEOUT)
             .concurrent_updates(True)
             .build()
         )
@@ -1226,27 +1205,76 @@ async def main() -> None:
         config.graceful_timeout = 300
         config.worker_class = "asyncio"
         config.workers = 1
+        config.timeout_keep_alive = 300
+        config.timeout_graceful_shutdown = 300
         
         # Sunucuyu başlat
         await serve(app, config)
             
     except Exception as e:
         logger.error(f"Hata: {e}", exc_info=True)
+        # Hata durumunda 5 saniye bekle ve yeniden dene
+        await asyncio.sleep(5)
+        raise  # Yeniden başlatma için hatayı yukarı fırlat
     finally:
         if 'keep_alive_task' in locals():
             keep_alive_task.cancel()
         if application:
-            await application.stop()
-            await application.bot.delete_webhook()
+            try:
+                await application.stop()
+                await application.bot.delete_webhook()
+            except Exception as e:
+                logger.error(f"Kapatma hatası: {e}")
 
-if __name__ == '__main__':
-    # Hata yakalama ve yeniden başlatma mekanizması
+async def keep_alive():
+    """Sunucuyu canlı tut"""
     while True:
         try:
-            asyncio.run(main())
+            await asyncio.sleep(30)
+            
+            # Webhook durumunu kontrol et
+            try:
+                webhook_info = await application.bot.get_webhook_info()
+                
+                if not webhook_info.url:
+                    logger.warning("Webhook düşmüş, yeniden ayarlanıyor...")
+                    await setup_webhook()
+                
+                # Kendi URL'mize ping at
+                url = f"https://{os.environ.get('RENDER_EXTERNAL_HOSTNAME')}/ping"
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    response = await client.get(url)
+                    if response.status_code == 200:
+                        logger.info("Keep-alive ping başarılı")
+                    else:
+                        logger.warning(f"Keep-alive ping başarısız: {response.status_code}")
+            except Exception as e:
+                logger.error(f"Keep-alive kontrol hatası: {e}")
+                await asyncio.sleep(5)  # Hata durumunda biraz bekle
+                continue
+                
         except Exception as e:
-            logger.error(f"Kritik hata, yeniden başlatılıyor: {e}")
-            time.sleep(5)  # 5 saniye bekle
+            logger.error(f"Keep-alive hatası: {e}")
+        
+        # Her durumda devam et
+        await asyncio.sleep(1)
+
+if __name__ == '__main__':
+    retry_count = 0
+    max_retries = 5
+    
+    while retry_count < max_retries:
+        try:
+            asyncio.run(main())
+            break  # Başarılı çalışma durumunda döngüden çık
+        except Exception as e:
+            retry_count += 1
+            logger.error(f"Kritik hata (Deneme {retry_count}/{max_retries}): {e}")
+            if retry_count < max_retries:
+                time.sleep(5 * retry_count)  # Her denemede biraz daha uzun bekle
+            else:
+                logger.error("Maksimum deneme sayısına ulaşıldı, bot kapatılıyor...")
+                break
         except KeyboardInterrupt:
             logger.info("Bot kapatılıyor...")
             break
