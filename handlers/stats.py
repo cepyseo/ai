@@ -1,39 +1,34 @@
 import logging
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update
 from telegram.ext import ContextTypes
 from services.user_service import UserService
-from datetime import datetime
 
 logger = logging.getLogger(__name__)
-user_service = UserService()
 
-async def show_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Kullanıcı istatistiklerini göster"""
+async def show_stats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    Kullanıcı istatistiklerini gösterir
+    """
     try:
         user_id = update.effective_user.id
+        user_service = UserService()
         stats = await user_service.get_user_stats(user_id)
         
-        join_date = datetime.fromisoformat(stats['join_date'])
-        last_active = datetime.fromisoformat(stats['last_active'])
-        
-        stats_message = (
-            "📊 *Kullanıcı İstatistikleri*\n\n"
-            f"📝 Toplam Mesaj: `{stats['total_messages']}`\n"
-            f"🖼️ Oluşturulan Görsel: `{stats['images_generated']}`\n"
-            f"📁 İşlenen Dosya: `{stats['files_processed']}`\n"
-            f"📅 Katılım: `{join_date.strftime('%d.%m.%Y')}`\n"
-            f"⏱️ Son Aktivite: `{last_active.strftime('%d.%m.%Y %H:%M')}`"
+        stats_text = (
+            "📊 *İstatistikleriniz*\n\n"
+            f"🤖 AI Sohbet Sayısı: {stats.get('ai_chats', 0)}\n"
+            f"🖼️ İşlenen Dosya Sayısı: {stats.get('processed_files', 0)}\n"
+            f"🔍 Görsel Arama Sayısı: {stats.get('image_searches', 0)}\n"
+            f"💎 Kalan Kredileriniz: {stats.get('credits', 0)}"
         )
         
-        if stats['premium_until']:
-            premium_until = datetime.fromisoformat(stats['premium_until'])
-            stats_message += f"\n👑 Premium Bitiş: `{premium_until.strftime('%d.%m.%Y')}`"
-            
         await update.message.reply_text(
-            stats_message,
+            stats_text,
             parse_mode='Markdown'
         )
         
     except Exception as e:
-        logger.error(f"İstatistik gösterme hatası: {e}")
-        await update.message.reply_text("❌ İstatistikler alınırken bir hata oluştu!") 
+        logger.error(f"İstatistik gösterme hatası: {e}", exc_info=True)
+        await update.message.reply_text(
+            "❌ İstatistikler gösterilirken bir hata oluştu!"
+        ) 

@@ -13,11 +13,12 @@ chat_service = ChatService()
 user_service = UserService()
 user_manager = UserManager()
 
-async def handle_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Normal sohbet mesajlarını işle"""
+async def handle_chat(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    Normal sohbet mesajlarını işler
+    """
     try:
-        # Mesaj ve kullanıcı bilgilerini al
-        message = update.message
+        message = update.message.text
         user_id = update.effective_user.id
         
         # Admin işlemlerini kontrol et
@@ -33,7 +34,7 @@ async def handle_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
         # Yasaklı kullanıcı kontrolü
         if user_manager.is_banned(user_id):
-            await message.reply_text("⛔️ Bottan yasaklandınız!")
+            await update.message.reply_text("⛔️ Bottan yasaklandınız!")
             return
             
         # AI sohbet durumunu kontrol et
@@ -43,26 +44,26 @@ async def handle_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
         # Kredi kontrolü
         if not await check_credits(user_id, 'ai_chat'):
-            await message.reply_text(
+            await update.message.reply_text(
                 "❌ Yetersiz kredi!\n"
                 "Kredi satın almak için @clonicai ile iletişime geçin."
             )
             return
             
         # Bekleme mesajı gönder
-        wait_message = await message.reply_text(
+        wait_message = await update.message.reply_text(
             "🤔 Düşünüyorum...",
             parse_mode='Markdown'
         )
             
         # Mesajı işle
-        response = await chat_service.process_message(user_id, message.text)
+        response = await chat_service.process_message(user_id, message)
         
         # Bekleme mesajını sil
         await wait_message.delete()
         
         # Yanıt gönder
-        await message.reply_text(
+        await update.message.reply_text(
             f"🤖 *AI Yanıtı:*\n\n{response}",
             parse_mode='Markdown'
         )
@@ -78,7 +79,6 @@ async def handle_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
     except Exception as e:
         logger.error(f"Sohbet işleme hatası: {e}", exc_info=True)
-        await message.reply_text(
-            "❌ Mesajınız işlenirken bir hata oluştu!\n"
-            "Lütfen daha sonra tekrar deneyin."
+        await update.message.reply_text(
+            "❌ Mesajınız işlenirken bir hata oluştu!"
         ) 

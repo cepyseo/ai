@@ -26,16 +26,19 @@ Key Requirements:
 │  ├─ 📄 logging_config.py (9 lines) - Python script containing project logic
 │  └─ 📄 settings.py (78 lines) - Python script containing project logic
 ├─ 📁 handlers
+│  ├─ 📄 __init__.py (36 lines) - Python script containing project logic
 │  ├─ 📄 admin.py (36 lines) - Python script containing project logic
 │  ├─ 📄 admin_handlers.py (177 lines) - Python script containing project logic
 │  ├─ 📄 broadcast.py (30 lines) - Python script containing project logic
 │  ├─ 📄 callback_handlers.py (48 lines) - Python script containing project logic
 │  ├─ 📄 chat_handlers.py (84 lines) - Python script containing project logic
+│  ├─ 📄 command_handlers.py (93 lines) - Python script containing project logic
 │  ├─ 📄 commands.py (43 lines) - Python script containing project logic
 │  ├─ 📄 error_handler.py (48 lines) - Python script containing project logic
+│  ├─ 📄 file_handlers.py (34 lines) - Python script containing project logic
 │  ├─ 📄 file_ops.py (23 lines) - Python script containing project logic
 │  ├─ 📄 settings_handlers.py (44 lines) - Python script containing project logic
-│  └─ 📄 stats.py (39 lines) - Python script containing project logic
+│  └─ 📄 stats.py (34 lines) - Python script containing project logic
 ├─ 📁 services
 │  ├─ 📄 ai_service.py (20 lines) - Python script containing project logic
 │  ├─ 📄 backup_service.py (52 lines) - Python script containing project logic
@@ -114,6 +117,7 @@ Functions:
 `handlers\chat_handlers.py` (84 lines)
 Functions:
 - handle_chat
+- is_admin
 
 `services\chat_service.py` (127 lines)
 Functions:
@@ -124,6 +128,19 @@ Functions:
 - isinstance
 - process_message
 - save_message
+
+`handlers\command_handlers.py` (93 lines)
+Functions:
+- add_thumbnail
+- admin_panel
+- ai_chat
+- ai_clear
+- ai_history
+- delete_default_thumb
+- get_image
+- help_command
+- start
+- view_default_thumb
 
 `handlers\commands.py` (43 lines)
 Functions:
@@ -144,6 +161,10 @@ Functions:
 Functions:
 - error_handler
 - isinstance
+
+`handlers\file_handlers.py` (34 lines)
+Functions:
+- process_file
 
 `handlers\file_ops.py` (23 lines)
 Functions:
@@ -239,7 +260,7 @@ Functions:
 Functions:
 - create_project_structure
 
-`handlers\stats.py` (39 lines)
+`handlers\stats.py` (34 lines)
 Functions:
 - show_stats
 
@@ -256,9 +277,9 @@ Functions:
 - update_stats
 
 # 📊 Project Overview
-**Files:** 27  |  **Lines:** 2,865
+**Files:** 30  |  **Lines:** 3,023
 
 ## 📁 File Distribution
-- .py: 27 files (2,865 lines)
+- .py: 30 files (3,023 lines)
 
-*Updated: January 19, 2025 at 05:10 PM*
+*Updated: January 19, 2025 at 05:16 PM*

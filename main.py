@@ -76,7 +76,10 @@ os.environ['TZ'] = 'UTC'  # UTC zaman dilimini ayarla
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # Logger ayarları
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
 logger = logging.getLogger(__name__)
 
 # Yeni komutlar için sabitler
@@ -167,14 +170,11 @@ async def ping():
 
 @app.route(f'/{TOKEN}', methods=['POST'])
 async def webhook():
-    """Telegram webhook handler"""
+    """Webhook handler"""
     try:
         json_data = await request.get_json()
-        logger.info(f"Gelen webhook verisi: {json_data}")
-        
         update = Update.de_json(json_data, app.bot_application.bot)
         await app.bot_application.process_update(update)
-        
         return 'OK'
     except Exception as e:
         logger.error(f"Webhook hatası: {e}", exc_info=True)
@@ -1388,8 +1388,6 @@ async def init_application() -> Application:
         .read_timeout(READ_TIMEOUT)
         .write_timeout(WRITE_TIMEOUT)
         .pool_timeout(POOL_TIMEOUT)
-        .connection_pool_size(100)
-        .concurrent_updates(True)
         .build()
     )
     
