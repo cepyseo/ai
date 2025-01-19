@@ -81,6 +81,9 @@ USER_CREDITS_DIR.mkdir(exist_ok=True)  # Eklendi
 user_service = UserService()
 chat_service = ChatService()
 
+# Global application değişkeni ekle
+application = None
+
 def setup_project():
     """Proje yapısını oluştur"""
     try:
@@ -137,22 +140,20 @@ async def webhook():
     try:
         if request.method == 'POST':
             json_data = await request.get_json()
-            logger.info(f"Gelen webhook verisi: {json_data}")  # Debug için log ekle
+            logger.info(f"Gelen webhook verisi: {json_data}")
             
-            app_instance = await init_application()
-            update = Update.de_json(json_data, app_instance.bot)
+            # Tek bir application instance kullan
+            application = context.bot._application
+            update = Update.de_json(json_data, application.bot)
             
             try:
-                await app_instance.process_update(update)
+                # Update'i doğrudan işle
+                await application.process_update(update)
                 logger.info(f"Update başarıyla işlendi: {update.update_id}")
             except Exception as e:
                 logger.error(f"Update işleme hatası: {e}", exc_info=True)
-            finally:
-                await asyncio.sleep(0.1)
-                await app_instance.shutdown()
             
             return 'OK'
-        return 'OK'
     except Exception as e:
         logger.error(f"Webhook hatası: {e}", exc_info=True)
         return 'Error', 500
@@ -1195,22 +1196,22 @@ async def setup_webhook(application):
         logger.info("Eski webhook temizlendi")
         
         # Yeni webhook'u ayarla
-        await application.bot.set_webhook(
+        success = await application.bot.set_webhook(
             url=WEBHOOK_URL,
-            allowed_updates=['message', 'callback_query', 'channel_post'],
+            allowed_updates=['message', 'callback_query', 'channel_post', 'edited_message'],
             drop_pending_updates=True,
             max_connections=100
         )
         
+        if success:
+            logger.info(f"Webhook başarıyla ayarlandı: {WEBHOOK_URL}")
+        else:
+            logger.error("Webhook ayarlanamadı!")
+            
         # Webhook bilgisini kontrol et
         webhook_info = await application.bot.get_webhook_info()
         logger.info(f"Webhook durumu: {webhook_info.to_dict()}")
         
-        if webhook_info.url == WEBHOOK_URL:
-            logger.info(f"Webhook başarıyla ayarlandı: {WEBHOOK_URL}")
-        else:
-            logger.error(f"Webhook ayarlanamadı! Beklenen: {WEBHOOK_URL}, Mevcut: {webhook_info.url}")
-            
     except Exception as e:
         logger.error(f"Webhook ayarlama hatası: {e}", exc_info=True)
         raise
@@ -1268,6 +1269,8 @@ async def init_application():
 
 async def main():
     try:
+        global application
+        
         # Proje yapısını oluştur
         setup_project()
         logger.info("Proje yapısı oluşturuldu")
@@ -1285,6 +1288,7 @@ async def main():
         logger.info("Application başlatıldı")
         
         # Web uygulamasını başlat
+        app.bot_application = application  # Quart app'e application'ı ekle
         app, config = create_app()
         logger.info(f"Web uygulaması {PORT} portunda başlatılıyor...")
         await serve(app, config)

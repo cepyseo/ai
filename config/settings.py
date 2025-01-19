@@ -38,8 +38,16 @@ WEBHOOK_HOST = os.environ.get('RENDER_EXTERNAL_HOSTNAME')
 if not WEBHOOK_HOST:
     raise ValueError("RENDER_EXTERNAL_HOSTNAME environment variable is not set!")
 
-WEBHOOK_URL = f"https://{WEBHOOK_HOST}/{TOKEN}"
+WEBHOOK_PATH = f'/{TOKEN}'
+WEBHOOK_URL = f"https://{WEBHOOK_HOST}{WEBHOOK_PATH}"
 WEBHOOK_MAX_CONNECTIONS = 100
+
+# Web sunucu ayarları
+WEB_SERVER = {
+    'host': '0.0.0.0',
+    'port': int(os.environ.get("PORT", 10000)),
+    'webhook_path': WEBHOOK_PATH,
+}
 
 # Debug modu
 DEBUG = os.environ.get('DEBUG', 'False').lower() == 'true'
