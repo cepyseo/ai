@@ -42,13 +42,16 @@ from config.settings import (
     RENDER_EXTERNAL_URL,
     RENDER_PORT,
     WEBHOOK_SECRET,
-    WEBHOOK_URL
+    WEBHOOK_URL,
+    FREEMIUM_FILE_SIZE,
+    PREMIUM_FILE_SIZE,
+    THUMB_SIZE
 )
 from web.app import create_app
 from handlers.stats import show_stats
 from handlers.callback_handlers import handle_callback_query
 from handlers.chat_handlers import handle_chat
-from services.user_service import UserService
+from services.user_service import UserService, get_user_data
 from services.chat_service import ChatService
 from handlers.admin_handlers import handle_admin_actions
 from utils.credits import check_credits, update_credits
@@ -82,11 +85,6 @@ logging.basicConfig(
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
-
-# Yeni komutlar için sabitler
-ALLOWED_EXTENSIONS = {'jpg', 'jpeg', 'png', 'gif'}
-MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
-THUMB_SIZE = (320, 320)
 
 # Kullanıcı ayarları için sabitler
 USER_DATA_DIR = Path("user_data")
