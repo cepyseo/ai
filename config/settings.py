@@ -30,8 +30,8 @@ for directory in [DATA_DIR, USER_DATA_DIR, CHAT_HISTORY_DIR,
     directory.mkdir(parents=True, exist_ok=True)
 
 # Dosya işleme ayarları
-ALLOWED_EXTENSIONS = {'jpg', 'jpeg', 'png', 'gif'}
-MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
+FREEMIUM_FILE_SIZE = 100 * 1024 * 1024  # 100MB
+PREMIUM_FILE_SIZE = 1.5 * 1024 * 1024 * 1024  # 1.5GB
 THUMB_SIZE = (320, 320)
 
 # Webhook ve port ayarları

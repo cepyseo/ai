@@ -1,10 +1,11 @@
 import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
-from config.settings import ALLOWED_EXTENSIONS, MAX_FILE_SIZE, THUMB_SIZE
+from config.settings import FREEMIUM_FILE_SIZE, PREMIUM_FILE_SIZE, THUMB_SIZE
 from PIL import Image
 import io
 from utils.credits import check_credits, update_credits
+from services.user_service import get_user_data
 
 logger = logging.getLogger(__name__)
 
@@ -16,8 +17,15 @@ async def process_file(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         if not update.message.document:
             return
 
-        # Kredi kontrolü
+        # Kullanıcı bilgilerini al
         user_id = update.effective_user.id
+        user_data = get_user_data(user_id)
+        is_premium = user_data.get('is_premium', False)
+        
+        # Dosya boyutu limiti belirle
+        max_file_size = PREMIUM_FILE_SIZE if is_premium else FREEMIUM_FILE_SIZE
+
+        # Kredi kontrolü
         if not await check_credits(user_id, 'file_operations'):
             await update.message.reply_text(
                 "❌ Yeterli krediniz yok!\n"
@@ -30,21 +38,18 @@ async def process_file(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         file_size = doc.file_size / (1024 * 1024)  # MB cinsinden
 
         # Dosya boyutu kontrolü
-        if doc.file_size > MAX_FILE_SIZE:
+        if doc.file_size > max_file_size:
+            limit_text = "1.5GB" if is_premium else "100MB"
             await update.message.reply_text(
-                f"❌ Dosya çok büyük! Maksimum: {MAX_FILE_SIZE/(1024*1024):.1f}MB\n"
-                f"📦 Dosya boyutu: {file_size:.1f}MB"
+                f"❌ Dosya çok büyük! {'' if is_premium else 'Freemium kullanıcı limitiniz: 100MB'}\n"
+                f"📦 Dosya boyutu: {file_size:.1f}MB\n"
+                f"{'💎 Premium kullanıcı limitiniz: 1.5GB' if is_premium else '💎 Premium üyelik ile 1.5GB\'a kadar dosya yükleyebilirsiniz!'}\n"
+                f"{'⚠️ Premium üye olduğunuz halde bu hatayı görüyorsanız @Cepyseo ile iletişime geçin.' if is_premium else '💡 Premium üyelik için: @Cepyseo'}"
             )
             return
 
-        # Dosya uzantısı kontrolü
-        file_ext = file_name.split('.')[-1].lower() if '.' in file_name else ''
-        if file_ext and file_ext not in ALLOWED_EXTENSIONS:
-            await update.message.reply_text(
-                f"❌ Desteklenmeyen dosya formatı!\n"
-                f"💡 İzin verilen formatlar: {', '.join(ALLOWED_EXTENSIONS)}"
-            )
-            return
+        # Dosya uzantısını al
+        file_ext = file_name.split('.')[-1].lower() if '.' in file_name else 'bilinmiyor'
 
         # İşlem menüsü
         keyboard = [
@@ -60,7 +65,8 @@ async def process_file(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             f"📁 *Dosya Bilgileri*\n\n"
             f"📝 Ad: `{file_name}`\n"
             f"📦 Boyut: `{file_size:.1f} MB`\n"
-            f"📎 Format: `{file_ext.upper() if file_ext else 'Bilinmiyor'}`\n\n"
+            f"📎 Format: `{file_ext.upper()}`\n"
+            f"👤 Hesap: {'💎 Premium' if is_premium else '🆓 Freemium'}\n\n"
             "💡 İşlem yapmak için butonları kullanın:",
             parse_mode='Markdown',
             reply_markup=reply_markup
