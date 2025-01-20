@@ -868,186 +868,140 @@ async def add_thumbnail(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # Varsayılan thumb işlemleri
 async def save_default_thumb(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Gönderilen fotoğrafı varsayılan thumb olarak kaydet"""
-    user_id = update.effective_user.id
-    
-    if not update.message.photo:
-        await update.message.reply_text("❌ Lütfen bir fotoğraf gönderin!")
-        return
-
     try:
+        # Fotoğraf kontrolü
+        if not update.message.photo:
+            await update.message.reply_text(
+                "❌ Lütfen bir fotoğraf gönderin!\n"
+                "💡 Küçük resim olarak kullanılacak fotoğrafı gönderin."
+            )
+            return
+
         # En büyük boyuttaki fotoğrafı al
         photo = update.message.photo[-1]
-        thumb_file = await context.bot.get_file(photo.file_id)
-        thumb_content = await thumb_file.download_as_bytearray()
         
-        # Küçük resmi işle
-        thumb_image = Image.open(io.BytesIO(thumb_content))
-        thumb_image.thumbnail(THUMB_SIZE)
-        thumb_buffer = io.BytesIO()
-        thumb_image.save(thumb_buffer, format='JPEG')
-        thumb_buffer.seek(0)
+        # İşlem mesajı
+        process_msg = await update.message.reply_text(
+            "🔄 Küçük resim işleniyor...",
+            parse_mode='Markdown'
+        )
+        
+        try:
+            # Fotoğrafı indir
+            thumb_file = await context.bot.get_file(photo.file_id)
+            thumb_content = await thumb_file.download_as_bytearray()
+            
+            # Küçük resmi işle
+            thumb_image = Image.open(io.BytesIO(thumb_content))
+            thumb_image.thumbnail(THUMB_SIZE)
+            thumb_buffer = io.BytesIO()
+            thumb_image.save(thumb_buffer, format='JPEG')
+            thumb_buffer.seek(0)
 
-        # Kullanıcı verilerini güncelle
-        user_data = get_user_data(user_id)
-        user_data["default_thumb"] = thumb_content.hex()  # Binary veriyi hex olarak sakla
-        save_user_data(user_id, user_data)
+            # Kullanıcı verilerini güncelle
+            user_id = update.effective_user.id
+            user_data = get_user_data(user_id)
+            user_data["default_thumb"] = thumb_content.hex()
+            save_user_data(user_id, user_data)
 
-        await update.message.reply_text("✅ Varsayılan küçük resim başarıyla kaydedildi!")
+            # İşlem mesajını güncelle
+            await process_msg.edit_text(
+                "✅ Varsayılan küçük resim kaydedildi!\n"
+                "💡 Artık bu küçük resim tüm dosyalarınıza otomatik eklenecek."
+            )
+            
+            # Küçük resmi göster
+            await context.bot.send_photo(
+                chat_id=update.effective_chat.id,
+                photo=thumb_buffer,
+                caption="🖼️ Yeni varsayılan küçük resminiz"
+            )
+
+        except Exception as e:
+            logger.error(f"Küçük resim kaydetme hatası: {e}")
+            await process_msg.edit_text(
+                "❌ Küçük resim kaydedilirken bir hata oluştu!\n"
+                "Lütfen daha sonra tekrar deneyin."
+            )
+
     except Exception as e:
-        await update.message.reply_text(f"❌ Küçük resim kaydedilirken hata oluştu: {str(e)}")
+        logger.error(f"Küçük resim işleme hatası: {e}")
+        await update.message.reply_text(
+            "❌ Küçük resim işlenirken bir hata oluştu!\n"
+            "Lütfen daha sonra tekrar deneyin."
+        )
 
 async def delete_default_thumb(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Varsayılan thumb'ı sil"""
-    user_id = update.effective_user.id
-    user_data = get_user_data(user_id)
-    
-    if user_data.get("default_thumb"):
-        user_data["default_thumb"] = None
-        save_user_data(user_id, user_data)
-        await update.message.reply_text("✅ Varsayılan küçük resim silindi!")
-    else:
-        await update.message.reply_text("❌ Kayıtlı varsayılan küçük resim bulunamadı!")
-
-# Dosya işleme fonksiyonunu güncelle
-@require_credits('file_operations')
-async def process_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Gönderilen dosyayı işle"""
-    if not update.message.document:
-        return
-
     try:
-        doc = update.message.document
-        original_name = doc.file_name or "dosya"
-        
-        # Kullanıcının varsayılan thumb'ını kontrol et
         user_id = update.effective_user.id
         user_data = get_user_data(user_id)
         
-        keyboard = [
-            [
-                InlineKeyboardButton("✏️ Yeniden Adlandır", callback_data=f"rename_{doc.file_id}"),
-                InlineKeyboardButton("🖼️ Küçük Resim Ekle", callback_data=f"thumb_{doc.file_id}")
-            ]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
+        if not user_data.get("default_thumb"):
+            await update.message.reply_text(
+                "❌ Kayıtlı varsayılan küçük resim bulunamadı!\n"
+                "💡 Küçük resim eklemek için bir fotoğraf gönderin."
+            )
+            return
+            
+        # Küçük resmi sil
+        user_data["default_thumb"] = None
+        save_user_data(user_id, user_data)
         
-        # Dosya bilgilerini göster
         await update.message.reply_text(
-            f"📁 *Dosya Bilgileri*\n\n"
-            f"📝 Ad: `{original_name}`\n"
-            f"📦 Boyut: `{doc.file_size / 1024 / 1024:.1f} MB`\n"
-            f"🖼️ Küçük Resim: {'✅ Var' if user_data.get('default_thumb') else '❌ Yok'}\n\n"
-            "💡 İşlem yapmak için butonları kullanın:",
-            parse_mode='Markdown',
-            reply_markup=reply_markup
+            "✅ Varsayılan küçük resim silindi!\n"
+            "💡 Yeni bir küçük resim eklemek için fotoğraf gönderebilirsiniz."
         )
 
     except Exception as e:
-        logger.error(f"Dosya işleme hatası: {e}")
-        await update.message.reply_text("❌ Dosya işlenirken bir hata oluştu!")
+        logger.error(f"Küçük resim silme hatası: {e}")
+        await update.message.reply_text(
+            "❌ Küçük resim silinirken bir hata oluştu!\n"
+            "Lütfen daha sonra tekrar deneyin."
+        )
 
-async def handle_rename_response(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Kullanıcının rename yanıtını işle"""
-    if 'waiting_rename' not in context.user_data:
-        return
-
+# Varsayılan thumb görüntüleme komutu
+async def view_default_thumb(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Varsayılan thumb'ı görüntüle"""
     try:
-        # Bekleyen dosya bilgilerini al
-        file_data = context.user_data['waiting_rename']
-        file_id = file_data['file_id']
-        message_id = file_data.get('message_id')
-        
-        # Yeni adı al ve temizle
-        new_base_name = update.message.text.strip()
-        
-        # Dosyayı al
-        file = await context.bot.get_file(file_id)
-        file_content = await file.download_as_bytearray()
-        
-        # Orijinal dosya adından uzantıyı al
-        original_file = await context.bot.get_file(file_id)
-        original_name = original_file.file_path.split('/')[-1]
-        original_ext = original_name.rsplit('.', 1)[1] if '.' in original_name else ''
-        
-        # Yeni dosya adını oluştur
-        new_name = f"{new_base_name}.{original_ext}" if original_ext else new_base_name
-        
-        # Kullanıcının varsayılan thumb'ını kontrol et
         user_id = update.effective_user.id
         user_data = get_user_data(user_id)
-        thumb_content = None
         
-        if user_data.get("default_thumb"):
+        if not user_data.get("default_thumb"):
+            await update.message.reply_text(
+                "❌ Kayıtlı varsayılan küçük resim bulunamadı!\n"
+                "💡 Küçük resim eklemek için bir fotoğraf gönderin."
+            )
+            return
+            
+        try:
+            # Küçük resmi hazırla
             thumb_content = bytes.fromhex(user_data["default_thumb"])
             thumb_image = Image.open(io.BytesIO(thumb_content))
             thumb_buffer = io.BytesIO()
             thumb_image.save(thumb_buffer, format='JPEG')
             thumb_buffer.seek(0)
-        
-        # Dosyayı gönder
-        sent_message = await context.bot.send_document(
-            chat_id=update.effective_chat.id,
-            document=io.BytesIO(file_content),
-            filename=new_name,
-            thumbnail=thumb_buffer if thumb_content else None,
-            caption=(
-                "✅ Dosya başarıyla yeniden adlandırıldı!\n\n"
-                f"📝 Yeni ad: `{new_name}`"
-            ),
-            parse_mode='Markdown'
-        )
-        
-        # Eski mesajı güncelle veya sil
-        if message_id:
-            try:
-                await context.bot.edit_message_text(
-                    chat_id=update.effective_chat.id,
-                    message_id=message_id,
-                    text=f"✅ Dosya yeniden adlandırıldı: `{new_name}`",
-                    parse_mode='Markdown'
-                )
-            except:
-                pass
-        
-        # Kullanıcının mesajını sil
-        await update.message.delete()
-        
-        # Kullanıcı verisini temizle
-        del context.user_data['waiting_rename']
+            
+            # Küçük resmi gönder
+            await context.bot.send_photo(
+                chat_id=update.effective_chat.id,
+                photo=thumb_buffer,
+                caption="🖼️ Mevcut varsayılan küçük resminiz"
+            )
+
+        except Exception as e:
+            logger.error(f"Küçük resim görüntüleme hatası: {e}")
+            await update.message.reply_text(
+                "❌ Küçük resim görüntülenirken bir hata oluştu!\n"
+                "Lütfen daha sonra tekrar deneyin."
+            )
 
     except Exception as e:
-        logger.error(f"Yeniden adlandırma hatası: {e}")
-        await update.message.reply_text("❌ Dosya yeniden adlandırılırken bir hata oluştu!")
-
-# Varsayılan thumb görüntüleme komutu
-async def view_default_thumb(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Varsayılan thumb'ı görüntüle"""
-    user_id = update.effective_user.id
-    user_data = get_user_data(user_id)
-    
-    if not user_data.get("default_thumb"):
-        await update.message.reply_text("❌ Kayıtlı varsayılan küçük resim bulunamadı!")
-        return
-        
-    try:
-        # Hex'ten binary'ye çevir
-        thumb_content = bytes.fromhex(user_data["default_thumb"])
-        
-        # Küçük resmi hazırla
-        thumb_image = Image.open(io.BytesIO(thumb_content))
-        thumb_buffer = io.BytesIO()
-        thumb_image.save(thumb_buffer, format='JPEG')
-        thumb_buffer.seek(0)
-        
-        # Küçük resmi gönder
-        await context.bot.send_photo(
-            chat_id=update.effective_chat.id,
-            photo=thumb_buffer,
-            caption="🖼️ Mevcut varsayılan küçük resim",
-            parse_mode='Markdown'
+        logger.error(f"Küçük resim görüntüleme hatası: {e}")
+        await update.message.reply_text(
+            "❌ Küçük resim görüntülenirken bir hata oluştu!\n"
+            "Lütfen daha sonra tekrar deneyin."
         )
-    except Exception as e:
-        await update.message.reply_text(f"❌ Küçük resim görüntülenirken hata oluştu: {str(e)}")
 
 # AI Sohbet Fonksiyonu
 @require_credits('ai_chat')

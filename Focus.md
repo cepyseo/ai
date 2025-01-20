@@ -20,7 +20,7 @@ Key Requirements:
 
 # 📁 Project Structure
 ├─ 📄 admin_utils.py (140 lines) - Python script containing project logic
-├─ 📄 main.py (1481 lines) - Python script containing project logic
+├─ 📄 main.py (1647 lines) - Python script containing project logic
 ├─ 📄 setup_project.py (21 lines) - Python script containing project logic
 ├─ 📁 config
 │  ├─ 📄 logging_config.py (9 lines) - Python script containing project logic
@@ -198,9 +198,10 @@ Functions:
 Functions:
 - setup_logging
 
-`main.py` (1481 lines)
+`main.py` (1647 lines)
 Functions:
 - ChatHistory
+- ID
 - _load_history
 - _save_history
 - add_message
@@ -226,14 +227,18 @@ Functions:
 - handle_admin_actions
 - handle_admin_callback
 - handle_callback_query
+- handle_chat
 - handle_rename_response
 - handle_update
 - hasattr
 - home
 - init_application
+- is_premium
 - için
+- kullanıcıya
 - listesi
 - locals
+- lower
 - main
 - ping
 - process_file
@@ -244,7 +249,9 @@ Functions:
 - save_user_data
 - setup_project
 - setup_webhook
+- show_stats
 - start
+- startswith
 - view_default_thumb
 - webhook
 - wrapper
@@ -282,9 +289,9 @@ Functions:
 - update_stats
 
 # 📊 Project Overview
-**Files:** 31  |  **Lines:** 3,069
+**Files:** 31  |  **Lines:** 3,235
 
 ## 📁 File Distribution
-- .py: 31 files (3,069 lines)
+- .py: 31 files (3,235 lines)
 
-*Updated: January 19, 2025 at 05:28 PM*
+*Updated: January 19, 2025 at 06:27 PM*
